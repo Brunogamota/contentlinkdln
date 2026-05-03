@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# contentlink
 
-## Getting Started
+Gerador de conteúdo viral para LinkedIn. Transforma ideia bruta em post que pega fogo.
 
-First, run the development server:
+Stack: Next.js 15 + Tailwind + Claude API (Anthropic SDK).
+
+## Deploy 1-clique
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FBrunogamota%2Fcontentlinkdln&env=ANTHROPIC_API_KEY&envDescription=Sua%20API%20key%20da%20Anthropic&envLink=https%3A%2F%2Fconsole.anthropic.com%2Fsettings%2Fkeys&project-name=contentlink&repository-name=contentlink)
+
+Quando clicar, o Vercel vai pedir tua `ANTHROPIC_API_KEY` (pega em [console.anthropic.com](https://console.anthropic.com/settings/keys)) e fazer o deploy automático.
+
+## Rodar local
 
 ```bash
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Como funciona
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Você joga uma ideia bruta (ex: "cliente que mais negocia preço é o que mais dá problema")
+- Escolhe os modos: **Polêmico**, **Viral** e/ou **Autoridade**
+- O sistema roda hook engine + 3 versões internas (visceral, reflexiva, natural)
+- Aplica filtro anti-genérico
+- Devolve hook + post pronto pra colar no LinkedIn
 
-## Learn More
+## Variáveis de ambiente
 
-To learn more about Next.js, take a look at the following resources:
+| Nome | Descrição |
+|------|-----------|
+| `ANTHROPIC_API_KEY` | API key da Anthropic |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy via CLI (alternativa)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm i -g vercel
+vercel login
+vercel env add ANTHROPIC_API_KEY production
+vercel --prod
+```
