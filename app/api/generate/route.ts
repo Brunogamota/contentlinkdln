@@ -1,10 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralContext } from "@/lib/neural/types";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+function getClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): string {
   const isPolemico = modes.includes("polemico");
@@ -105,7 +105,7 @@ ${
 }
 
 📦 OUTPUT FORMAT
-Retorne EXATAMENTE nesse formato JSON (sem markdown, sem explicação):
+Retorne EXATAMENTE nesse formato JSON:
 {
   "hook": "o melhor hook escolhido",
   "post": "o post completo aqui"
@@ -127,25 +127,24 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = buildSystemPrompt(modes || [], neuralContext);
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+    const completion = await getClient().chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 2048,
-      system: systemPrompt,
+      response_format: { type: "json_object" },
       messages: [
+        { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn.`,
+          content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn em JSON.`,
         },
       ],
     });
 
-    const rawContent =
-      message.content[0].type === "text" ? message.content[0].text : "";
+    const rawContent = completion.choices[0]?.message?.content ?? "";
 
     let parsed: { hook: string; post: string };
     try {
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawContent);
+      parsed = JSON.parse(rawContent);
     } catch {
       return NextResponse.json(
         { error: "Erro ao processar resposta. Tenta de novo." },
