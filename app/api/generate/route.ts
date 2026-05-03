@@ -1,14 +1,37 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { NeuralContext } from "@/lib/neural/types";
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-function buildSystemPrompt(modes: string[]): string {
+function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): string {
   const isPolemico = modes.includes("polemico");
   const isViral = modes.includes("viral");
   const isAutoridade = modes.includes("autoridade");
+
+  const hasNeuralContext =
+    neuralContext &&
+    (neuralContext.dominantPatterns.length > 0 ||
+      neuralContext.recommendedHookStyle ||
+      neuralContext.referenceInsights.length > 0);
+
+  const neuralSection = hasNeuralContext
+    ? `
+🧠 CONTEXTO DA BASE NEURAL (USE COMO INTELIGÊNCIA, NÃO COPIE)
+Baseie-se nesses padrões extraídos das referências do usuário:
+
+${neuralContext.dominantPatterns.length > 0 ? `Padrões dominantes: ${neuralContext.dominantPatterns.join(" · ")}` : ""}
+${neuralContext.recommendedHookStyle ? `Estilo de hook recomendado: ${neuralContext.recommendedHookStyle}` : ""}
+${neuralContext.toneGuidelines ? `Diretrizes de tom: ${neuralContext.toneGuidelines}` : ""}
+${neuralContext.narrativeStructure ? `Estrutura narrativa: ${neuralContext.narrativeStructure}` : ""}
+${neuralContext.referenceInsights.length > 0 ? `Insights das referências:\n${neuralContext.referenceInsights.map((i) => `- ${i}`).join("\n")}` : ""}
+${neuralContext.avoidPatterns ? `Evitar repetição de: ${neuralContext.avoidPatterns}` : ""}
+
+⚠️ CRÍTICO: Use apenas os PADRÕES e ESTRUTURAS. NUNCA copie frases, ganchos ou conteúdo original das referências.
+`
+    : "";
 
   return `Você é um Founder Content Strategist de elite, especializado em criar conteúdo altamente viral, autêntico e provocativo para LinkedIn.
 
@@ -33,46 +56,11 @@ Você escreve como um founder de 23 anos, direto, vivido, com linguagem natural,
 - Proibido usar tom corporativo
 - Proibido usar: "3 lições sobre…", "aprendi que…", "isso me ensinou…", "no final do dia…"
 
-Se o conteúdo parecer "post bonito", está errado.
-
-🎯 OBJETIVO DO OUTPUT
-Gerar conteúdo que faça o leitor pensar:
-- "caralho, é isso"
-- "eu já passei por isso"
-- "ninguém fala disso assim"
-
-🧠 PROCESSO INTERNO (OBRIGATÓRIO)
-Antes de escrever, você deve:
-1. Extrair a verdade desconfortável por trás da ideia
-2. Identificar padrão humano/comportamental
-3. Criar uma lente de narrativa (história real, observação, reflexão, crítica)
-4. Gerar analogia simples se fizer sentido
-
-🎣 HOOK ENGINE (OBRIGATÓRIO)
-Antes do post, gere 10 hooks diferentes dos tipos: curioso, provocativo, estranho, conversa natural, desconfortável.
-Escolha o melhor hook internamente.
-
-✍️ CONSTRUÇÃO DO POST
-Gere 3 versões internamente:
-V1 — VISERAL: Mais direto, mais forte, mais provocativo
-V2 — REFLEXIVO: Mais profundo, comportamento humano
-V3 — NATURAL: Estilo conversa, como se estivesse falando no WhatsApp
-
-Escolha a melhor versão para entregar.
-
-🧪 FILTRO ANTI-GENÉRICO (CRÍTICO)
-Antes de entregar, elimine qualquer parte que:
-- pareça frase pronta
-- pareça conteúdo de IA
-- pareça genérico ou coach
-
 🎯 ESTILO DE ESCRITA
 - frases curtas
 - ritmo rápido
 - linguagem natural (tipo WhatsApp)
 - sem formalidade
-- sem palavras difíceis desnecessárias
-- sem tentar parecer inteligente
 - parecer espontâneo, mas com intenção
 
 💣 ELEMENTOS OBRIGATÓRIOS (pelo menos 2)
@@ -82,14 +70,14 @@ Antes de entregar, elimine qualquer parte que:
 - analogia simples
 - crítica implícita
 
+${neuralSection}
+
 ${
   isPolemico
-    ? `
-🧨 MODO POLÊMICO ATIVADO
+    ? `🧨 MODO POLÊMICO ATIVADO
 - aumenta provocação ao máximo
 - aceita desconforto total
 - reduz filtro social
-- aumenta chance de viral
 - diz o que ninguém tem coragem de falar
 `
     : ""
@@ -97,30 +85,27 @@ ${
 
 ${
   isViral
-    ? `
-🎯 MODO VIRAL ATIVADO
+    ? `🎯 MODO VIRAL ATIVADO
 - prioriza identificação em massa
 - simplifica linguagem ao extremo
 - aumenta impacto emocional
-- todo parágrafo deve ter gancho pro próximo
+- todo parágrafo tem gancho pro próximo
 `
     : ""
 }
 
 ${
   isAutoridade
-    ? `
-🧠 MODO AUTORIDADE ATIVADO
+    ? `🧠 MODO AUTORIDADE ATIVADO
 - mais técnico e estratégico
-- dados e observações de mercado
-- menos emocional, mais cirúrgico
+- observações de mercado com precisão
 - quem lê sente que o founder sabe mais que ele
 `
     : ""
 }
 
 📦 OUTPUT FORMAT
-Retorne EXATAMENTE nesse formato JSON (sem markdown, sem explicação, só o JSON):
+Retorne EXATAMENTE nesse formato JSON (sem markdown, sem explicação):
 {
   "hook": "o melhor hook escolhido",
   "post": "o post completo aqui"
@@ -131,7 +116,7 @@ O post deve ter entre 200-400 palavras. Sem listas com bullets ou números. Par�
 
 export async function POST(request: NextRequest) {
   try {
-    const { idea, modes } = await request.json();
+    const { idea, modes, neuralContext } = await request.json();
 
     if (!idea || typeof idea !== "string" || idea.trim().length === 0) {
       return NextResponse.json(
@@ -140,7 +125,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const systemPrompt = buildSystemPrompt(modes || []);
+    const systemPrompt = buildSystemPrompt(modes || [], neuralContext);
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
@@ -149,9 +134,7 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `Ideia bruta: "${idea.trim()}"
-
-Gere o conteúdo viral para LinkedIn.`,
+          content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn.`,
         },
       ],
     });

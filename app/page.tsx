@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { getNeuralContext } from "@/lib/neural/getNeuralContext";
+import { getAllReferences } from "@/lib/neural/store";
+import { NeuralContext } from "@/lib/neural/types";
 
 type Mode = "polemico" | "viral" | "autoridade";
 
@@ -30,6 +34,12 @@ export default function Home() {
   const [result, setResult] = useState<GeneratedContent | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<"hook" | "post" | "full" | null>(null);
+  const [neuralCount, setNeuralCount] = useState(0);
+  const [lastContext, setLastContext] = useState<NeuralContext | null>(null);
+
+  useEffect(() => {
+    setNeuralCount(getAllReferences().length);
+  }, []);
 
   const toggleMode = (mode: Mode) => {
     setSelectedModes((prev) =>
@@ -43,11 +53,23 @@ export default function Home() {
     setError("");
     setResult(null);
 
+    const neuralContext = getNeuralContext(selectedModes, idea);
+    const hasContext =
+      neuralContext.dominantPatterns.length > 0 ||
+      neuralContext.recommendedHookStyle !== "" ||
+      neuralContext.referenceInsights.length > 0;
+
+    setLastContext(hasContext ? neuralContext : null);
+
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea, modes: selectedModes }),
+        body: JSON.stringify({
+          idea,
+          modes: selectedModes,
+          neuralContext: hasContext ? neuralContext : undefined,
+        }),
       });
 
       const data = await res.json();
@@ -86,9 +108,20 @@ export default function Home() {
               gerador de conteúdo viral para LinkedIn
             </p>
           </div>
-          <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded-full">
-            founder mode
-          </span>
+          <Link
+            href="/neural-base"
+            className="flex items-center gap-2 text-xs border border-white/10 hover:border-purple-500/40 hover:bg-purple-500/5 px-3 py-2 rounded-xl transition-all group"
+          >
+            <span>🧠</span>
+            <span className="text-white/40 group-hover:text-purple-400 transition-colors">
+              base neural
+            </span>
+            {neuralCount > 0 && (
+              <span className="bg-purple-500/20 text-purple-400 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                {neuralCount}
+              </span>
+            )}
+          </Link>
         </div>
       </header>
 
@@ -100,11 +133,16 @@ export default function Home() {
             <br />
             <span className="text-white/30">em post que pega fogo.</span>
           </h2>
+          {neuralCount > 0 && (
+            <p className="text-xs text-purple-400/60 mt-3 flex items-center gap-1.5">
+              <span>🧠</span>
+              {neuralCount} referência{neuralCount !== 1 ? "s" : ""} na base neural — geração potencializada
+            </p>
+          )}
         </div>
 
         {/* Input Section */}
         <div className="space-y-6">
-          {/* Idea Input */}
           <div>
             <label className="block text-xs text-white/40 uppercase tracking-widest mb-3">
               Ideia bruta
@@ -173,7 +211,7 @@ export default function Home() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                gerando...
+                {lastContext ? "gerando com base neural..." : "gerando..."}
               </span>
             ) : (
               "gerar post"
@@ -191,9 +229,14 @@ export default function Home() {
         {result && (
           <div className="mt-10 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs text-white/40 uppercase tracking-widest">
-                Resultado
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs text-white/40 uppercase tracking-widest">Resultado</h3>
+                {lastContext && (
+                  <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full">
+                    🧠 base neural ativa
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => copyToClipboard(fullPost, "full")}
                 className="text-xs text-white/40 hover:text-white/80 transition-colors border border-white/10 hover:border-white/30 px-3 py-1.5 rounded-lg"
@@ -205,9 +248,7 @@ export default function Home() {
             {/* Hook */}
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-blue-400/70 uppercase tracking-widest font-medium">
-                  Hook
-                </span>
+                <span className="text-xs text-blue-400/70 uppercase tracking-widest font-medium">Hook</span>
                 <button
                   onClick={() => copyToClipboard(result.hook, "hook")}
                   className="text-xs text-white/30 hover:text-white/70 transition-colors"
@@ -215,17 +256,13 @@ export default function Home() {
                   {copied === "hook" ? "copiado ✓" : "copiar"}
                 </button>
               </div>
-              <p className="text-white font-semibold text-base leading-snug">
-                {result.hook}
-              </p>
+              <p className="text-white font-semibold text-base leading-snug">{result.hook}</p>
             </div>
 
             {/* Post */}
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-blue-400/70 uppercase tracking-widest font-medium">
-                  Post
-                </span>
+                <span className="text-xs text-blue-400/70 uppercase tracking-widest font-medium">Post</span>
                 <button
                   onClick={() => copyToClipboard(result.post, "post")}
                   className="text-xs text-white/30 hover:text-white/70 transition-colors"
@@ -233,9 +270,7 @@ export default function Home() {
                   {copied === "post" ? "copiado ✓" : "copiar"}
                 </button>
               </div>
-              <div className="text-white/80 text-sm leading-relaxed whitespace-pre-wrap">
-                {result.post}
-              </div>
+              <div className="text-white/80 text-sm leading-relaxed whitespace-pre-wrap">{result.post}</div>
               <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
                 <span className="text-xs text-white/20">
                   {result.post.length} chars · LinkedIn máx: 3.000
@@ -246,7 +281,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Regenerate */}
             <button
               onClick={generate}
               disabled={loading}
@@ -258,7 +292,6 @@ export default function Home() {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="mt-20 border-t border-white/5 px-6 py-6">
         <div className="max-w-3xl mx-auto text-center text-xs text-white/20">
           feito pra founder que não tem tempo pra postar bonito
