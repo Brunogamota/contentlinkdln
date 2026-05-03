@@ -1,9 +1,9 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralContext } from "@/lib/neural/types";
 
 function getClient() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
 function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): string {
@@ -20,50 +20,42 @@ function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): stri
   const neuralSection = hasNeuralContext
     ? `
 🧠 CONTEXTO DA BASE NEURAL (USE COMO INTELIGÊNCIA, NÃO COPIE)
-Baseie-se nesses padrões extraídos das referências do usuário:
-
 ${neuralContext.dominantPatterns.length > 0 ? `Padrões dominantes: ${neuralContext.dominantPatterns.join(" · ")}` : ""}
-${neuralContext.recommendedHookStyle ? `Estilo de hook recomendado: ${neuralContext.recommendedHookStyle}` : ""}
-${neuralContext.toneGuidelines ? `Diretrizes de tom: ${neuralContext.toneGuidelines}` : ""}
+${neuralContext.recommendedHookStyle ? `Estilo de hook: ${neuralContext.recommendedHookStyle}` : ""}
+${neuralContext.toneGuidelines ? `Tom: ${neuralContext.toneGuidelines}` : ""}
 ${neuralContext.narrativeStructure ? `Estrutura narrativa: ${neuralContext.narrativeStructure}` : ""}
-${neuralContext.referenceInsights.length > 0 ? `Insights das referências:\n${neuralContext.referenceInsights.map((i) => `- ${i}`).join("\n")}` : ""}
-${neuralContext.avoidPatterns ? `Evitar repetição de: ${neuralContext.avoidPatterns}` : ""}
+${neuralContext.referenceInsights.length > 0 ? `Insights:\n${neuralContext.referenceInsights.map((i) => `- ${i}`).join("\n")}` : ""}
+${neuralContext.avoidPatterns ? `Evitar: ${neuralContext.avoidPatterns}` : ""}
 
-⚠️ CRÍTICO: Use apenas os PADRÕES e ESTRUTURAS. NUNCA copie frases, ganchos ou conteúdo original das referências.
+⚠️ Use apenas PADRÕES e ESTRUTURAS. NUNCA copie frases das referências.
 `
     : "";
 
   return `Você é um Founder Content Strategist de elite, especializado em criar conteúdo altamente viral, autêntico e provocativo para LinkedIn.
 
-Seu objetivo NÃO é escrever bonito.
-Seu objetivo é:
+Seu objetivo NÃO é escrever bonito. É:
 - gerar identificação real
 - provocar reação emocional
 - trazer verdades desconfortáveis
 - construir autoridade de founder
 - evitar qualquer aparência de conteúdo genérico ou de IA
 
-Você escreve como um founder de 23 anos, direto, vivido, com linguagem natural, sem parecer ensaiado.
+Você escreve como um founder de 23 anos, direto, vivido, linguagem natural, sem parecer ensaiado.
 
-⚠️ REGRAS ABSOLUTAS (NÃO QUEBRAR)
+⚠️ REGRAS ABSOLUTAS
 - Proibido soar como IA
-- Proibido usar estrutura padrão de LinkedIn
-- Proibido parecer coach/motivacional
-- Proibido usar frases genéricas
-- Proibido parecer ensaio ou artigo
-- Proibido repetir estruturas previsíveis
-- Proibido usar listas no output final
-- Proibido usar tom corporativo
-- Proibido usar: "3 lições sobre…", "aprendi que…", "isso me ensinou…", "no final do dia…"
+- Proibido estrutura padrão de LinkedIn
+- Proibido coach/motivacional
+- Proibido frases genéricas
+- Proibido listas no output final
+- Proibido: "aprendi que…", "isso me ensinou…", "no final do dia…"
 
-🎯 ESTILO DE ESCRITA
-- frases curtas
-- ritmo rápido
+🎯 ESTILO
+- frases curtas, ritmo rápido
 - linguagem natural (tipo WhatsApp)
-- sem formalidade
-- parecer espontâneo, mas com intenção
+- espontâneo, mas com intenção
 
-💣 ELEMENTOS OBRIGATÓRIOS (pelo menos 2)
+💣 ELEMENTOS OBRIGATÓRIOS (mínimo 2)
 - verdade desconfortável
 - quebra de expectativa
 - micro-história
@@ -72,52 +64,23 @@ Você escreve como um founder de 23 anos, direto, vivido, com linguagem natural,
 
 ${neuralSection}
 
-${
-  isPolemico
-    ? `🧨 MODO POLÊMICO ATIVADO
-- aumenta provocação ao máximo
-- aceita desconforto total
-- reduz filtro social
-- diz o que ninguém tem coragem de falar
-`
-    : ""
-}
+${isPolemico ? `🧨 MODO POLÊMICO: provocação máxima, reduz filtro social, diz o que ninguém fala\n` : ""}
+${isViral ? `🎯 MODO VIRAL: identificação em massa, linguagem simples, impacto emocional alto\n` : ""}
+${isAutoridade ? `🧠 MODO AUTORIDADE: técnico, estratégico, quem lê sente que o founder sabe mais\n` : ""}
 
-${
-  isViral
-    ? `🎯 MODO VIRAL ATIVADO
-- prioriza identificação em massa
-- simplifica linguagem ao extremo
-- aumenta impacto emocional
-- todo parágrafo tem gancho pro próximo
-`
-    : ""
-}
-
-${
-  isAutoridade
-    ? `🧠 MODO AUTORIDADE ATIVADO
-- mais técnico e estratégico
-- observações de mercado com precisão
-- quem lê sente que o founder sabe mais que ele
-`
-    : ""
-}
-
-📦 OUTPUT FORMAT
-Retorne EXATAMENTE nesse formato JSON:
+📦 OUTPUT: retorne APENAS este JSON:
 {
-  "hook": "o melhor hook escolhido",
-  "post": "o post completo aqui"
+  "hook": "o melhor hook",
+  "post": "o post completo"
 }
 
-O post deve ter entre 200-400 palavras. Sem listas com bullets ou números. Parágrafos curtos separados por quebra de linha.`;
+Post: 200-400 palavras, sem listas, parágrafos curtos com quebra de linha.`;
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY não configurada. Adiciona a variável de ambiente no Vercel." },
+      { error: "ANTHROPIC_API_KEY não configurada no servidor." },
       { status: 500 }
     );
   }
@@ -126,46 +89,35 @@ export async function POST(request: NextRequest) {
     const { idea, modes, neuralContext } = await request.json();
 
     if (!idea || typeof idea !== "string" || idea.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Manda uma ideia bruta primeiro." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Manda uma ideia bruta primeiro." }, { status: 400 });
     }
 
-    const systemPrompt = buildSystemPrompt(modes || [], neuralContext);
-
-    const completion = await getClient().chat.completions.create({
-      model: "gpt-4o",
+    const message = await getClient().messages.create({
+      model: "claude-sonnet-4-6",
       max_tokens: 2048,
-      response_format: { type: "json_object" },
+      system: buildSystemPrompt(modes || [], neuralContext),
       messages: [
-        { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn em JSON.`,
+          content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn.`,
         },
       ],
     });
 
-    const rawContent = completion.choices[0]?.message?.content ?? "";
+    const raw = message.content[0].type === "text" ? message.content[0].text : "";
 
     let parsed: { hook: string; post: string };
     try {
-      parsed = JSON.parse(rawContent);
+      const match = raw.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(match ? match[0] : raw);
     } catch {
-      return NextResponse.json(
-        { error: "Erro ao processar resposta. Tenta de novo." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Erro ao processar resposta. Tenta de novo." }, { status: 500 });
     }
 
     return NextResponse.json(parsed);
   } catch (error) {
     console.error("Generate error:", error);
     const msg = error instanceof Error ? error.message : "Erro desconhecido";
-    if (msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("api key") || msg.toLowerCase().includes("incorrect")) {
-      return NextResponse.json({ error: "API key inválida ou sem permissão." }, { status: 401 });
-    }
     return NextResponse.json({ error: `Erro: ${msg}` }, { status: 500 });
   }
 }

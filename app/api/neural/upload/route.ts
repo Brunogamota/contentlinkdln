@@ -1,9 +1,9 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralReference, StrategicAnalysis, ReferenceScore } from "@/lib/neural/types";
 
 function getClient() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
 const ANALYSIS_PROMPT = `Você é um estrategista de conteúdo especialista em LinkedIn viral.
@@ -39,13 +39,12 @@ Retorne APENAS um JSON válido com esta estrutura exata:
   "tags": ["tag geral 1", "tag geral 2", "tag geral 3"]
 }
 
-Scores são de 0-100. provocationType e authorityLevel são de 1-10.
-Seja específico e estratégico, não genérico.`;
+Scores são de 0-100. provocationType e authorityLevel são de 1-10. Seja específico e estratégico.`;
 
 export async function POST(request: NextRequest) {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY não configurada. Adiciona a variável de ambiente no Vercel." },
+      { error: "ANTHROPIC_API_KEY não configurada no servidor." },
       { status: 500 }
     );
   }
@@ -69,24 +68,27 @@ export async function POST(request: NextRequest) {
 
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
+    const mediaType = file.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
     const dataUrl = `data:${file.type};base64,${base64}`;
 
-    const completion = await getClient().chat.completions.create({
-      model: "gpt-4o",
+    const message = await getClient().messages.create({
+      model: "claude-sonnet-4-6",
       max_tokens: 2048,
-      response_format: { type: "json_object" },
       messages: [
         {
           role: "user",
           content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mediaType, data: base64 },
+            },
             { type: "text", text: ANALYSIS_PROMPT },
-            { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
       ],
     });
 
-    const raw = completion.choices[0]?.message?.content ?? "";
+    const raw = message.content[0].type === "text" ? message.content[0].text : "";
 
     let parsed: {
       extractedText: string;
@@ -96,7 +98,8 @@ export async function POST(request: NextRequest) {
     };
 
     try {
-      parsed = JSON.parse(raw);
+      const match = raw.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(match ? match[0] : raw);
     } catch {
       return NextResponse.json({ error: "Erro ao processar análise. Tenta de novo." }, { status: 500 });
     }
@@ -117,12 +120,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Neural upload error:", error);
     const msg = error instanceof Error ? error.message : "Erro desconhecido";
-    if (msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("api key") || msg.toLowerCase().includes("incorrect")) {
-      return NextResponse.json({ error: "API key inválida ou sem permissão." }, { status: 401 });
-    }
-    if (msg.toLowerCase().includes("timeout") || msg.toLowerCase().includes("timed out")) {
-      return NextResponse.json({ error: "Timeout: imagem muito pesada. Tenta com uma menor." }, { status: 504 });
-    }
     return NextResponse.json({ error: `Erro: ${msg}` }, { status: 500 });
   }
 }
