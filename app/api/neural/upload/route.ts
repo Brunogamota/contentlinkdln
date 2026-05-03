@@ -42,13 +42,6 @@ Retorne APENAS um JSON válido com esta estrutura exata:
 Scores são de 0-100. provocationType e authorityLevel são de 1-10. Seja específico e estratégico.`;
 
 export async function POST(request: NextRequest) {
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json(
-      { error: "OPENAI_API_KEY não configurada no servidor." },
-      { status: 500 }
-    );
-  }
-
   try {
     const formData = await request.formData();
     const file = formData.get("image") as File | null;

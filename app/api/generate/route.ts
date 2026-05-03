@@ -78,13 +78,6 @@ Post: 200-400 palavras, sem listas, parágrafos curtos com quebra de linha.`;
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json(
-      { error: "OPENAI_API_KEY não configurada no servidor." },
-      { status: 500 }
-    );
-  }
-
   try {
     const { idea, modes, neuralContext } = await request.json();
 
