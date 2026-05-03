@@ -43,6 +43,13 @@ Scores são de 0-100. provocationType e authorityLevel são de 1-10.
 Seja específico e estratégico, não genérico.`;
 
 export async function POST(request: NextRequest) {
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json(
+      { error: "OPENAI_API_KEY não configurada. Adiciona a variável de ambiente no Vercel." },
+      { status: 500 }
+    );
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get("image") as File | null;
