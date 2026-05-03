@@ -155,9 +155,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(parsed);
   } catch (error) {
     console.error("Generate error:", error);
-    return NextResponse.json(
-      { error: "Erro interno. Verifica a API key e tenta de novo." },
-      { status: 500 }
-    );
+    const msg = error instanceof Error ? error.message : "Erro desconhecido";
+    if (msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("api key") || msg.toLowerCase().includes("incorrect")) {
+      return NextResponse.json({ error: "API key inválida ou sem permissão." }, { status: 401 });
+    }
+    return NextResponse.json({ error: `Erro: ${msg}` }, { status: 500 });
   }
 }

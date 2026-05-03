@@ -109,6 +109,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(reference);
   } catch (error) {
     console.error("Neural upload error:", error);
-    return NextResponse.json({ error: "Erro interno. Verifica a API key." }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Erro desconhecido";
+    if (msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("api key") || msg.toLowerCase().includes("incorrect")) {
+      return NextResponse.json({ error: "API key inválida ou sem permissão." }, { status: 401 });
+    }
+    if (msg.toLowerCase().includes("timeout") || msg.toLowerCase().includes("timed out")) {
+      return NextResponse.json({ error: "Timeout: imagem muito pesada. Tenta com uma menor." }, { status: 504 });
+    }
+    return NextResponse.json({ error: `Erro: ${msg}` }, { status: 500 });
   }
 }
