@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralContext } from "@/lib/neural/types";
 
 function getClient() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
 function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): string {
@@ -78,9 +78,9 @@ Post: 200-400 palavras, sem listas, parágrafos curtos com quebra de linha.`;
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY não configurada no servidor." },
+      { error: "OPENAI_API_KEY não configurada no servidor." },
       { status: 500 }
     );
   }
@@ -92,24 +92,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Manda uma ideia bruta primeiro." }, { status: 400 });
     }
 
-    const message = await getClient().messages.create({
-      model: "claude-sonnet-4-6",
+    const completion = await getClient().chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 2048,
-      system: buildSystemPrompt(modes || [], neuralContext),
+      response_format: { type: "json_object" },
       messages: [
-        {
-          role: "user",
-          content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn.`,
-        },
+        { role: "system", content: buildSystemPrompt(modes || [], neuralContext) },
+        { role: "user", content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn.` },
       ],
     });
 
-    const raw = message.content[0].type === "text" ? message.content[0].text : "";
+    const raw = completion.choices[0]?.message?.content ?? "";
 
     let parsed: { hook: string; post: string };
     try {
-      const match = raw.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(match ? match[0] : raw);
+      parsed = JSON.parse(raw);
     } catch {
       return NextResponse.json({ error: "Erro ao processar resposta. Tenta de novo." }, { status: 500 });
     }

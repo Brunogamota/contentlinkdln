@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralReference, StrategicAnalysis, ReferenceScore } from "@/lib/neural/types";
 
 function getClient() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
 const ANALYSIS_PROMPT = `Você é um estrategista de conteúdo especialista em LinkedIn viral.
@@ -42,9 +42,9 @@ Retorne APENAS um JSON válido com esta estrutura exata:
 Scores são de 0-100. provocationType e authorityLevel são de 1-10. Seja específico e estratégico.`;
 
 export async function POST(request: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY não configurada no servidor." },
+      { error: "OPENAI_API_KEY não configurada no servidor." },
       { status: 500 }
     );
   }
@@ -68,27 +68,24 @@ export async function POST(request: NextRequest) {
 
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
-    const mediaType = file.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
     const dataUrl = `data:${file.type};base64,${base64}`;
 
-    const message = await getClient().messages.create({
-      model: "claude-sonnet-4-6",
+    const completion = await getClient().chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 2048,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "user",
           content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 },
-            },
             { type: "text", text: ANALYSIS_PROMPT },
+            { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
       ],
     });
 
-    const raw = message.content[0].type === "text" ? message.content[0].text : "";
+    const raw = completion.choices[0]?.message?.content ?? "";
 
     let parsed: {
       extractedText: string;
@@ -98,8 +95,7 @@ export async function POST(request: NextRequest) {
     };
 
     try {
-      const match = raw.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(match ? match[0] : raw);
+      parsed = JSON.parse(raw);
     } catch {
       return NextResponse.json({ error: "Erro ao processar análise. Tenta de novo." }, { status: 500 });
     }
