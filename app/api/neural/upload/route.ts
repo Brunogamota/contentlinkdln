@@ -2,8 +2,8 @@ import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralReference, StrategicAnalysis, ReferenceScore } from "@/lib/neural/types";
 
-function getClient() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getClient(apiKey: string) {
+  return new OpenAI({ apiKey });
 }
 
 const ANALYSIS_PROMPT = `Você é um estrategista de conteúdo especialista em LinkedIn viral.
@@ -42,6 +42,15 @@ Retorne APENAS um JSON válido com esta estrutura exata:
 Scores são de 0-100. provocationType e authorityLevel são de 1-10. Seja específico e estratégico.`;
 
 export async function POST(request: NextRequest) {
+  const apiKey = request.headers.get("x-api-key") || process.env.OPENAI_API_KEY || "";
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "API key não configurada. Clica em 'add key' no topo da página." },
+      { status: 401 }
+    );
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get("image") as File | null;
@@ -63,7 +72,7 @@ export async function POST(request: NextRequest) {
     const base64 = Buffer.from(bytes).toString("base64");
     const dataUrl = `data:${file.type};base64,${base64}`;
 
-    const completion = await getClient().chat.completions.create({
+    const completion = await getClient(apiKey).chat.completions.create({
       model: "gpt-4o",
       max_tokens: 2048,
       response_format: { type: "json_object" },

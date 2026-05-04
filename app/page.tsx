@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getNeuralContext } from "@/lib/neural/getNeuralContext";
 import { getAllReferences } from "@/lib/neural/store";
+import { getApiKey } from "@/lib/settings";
 import { NeuralContext } from "@/lib/neural/types";
+import { ApiKeyModal, ApiKeyButton } from "@/components/ApiKeyModal";
 
 type Mode = "polemico" | "viral" | "autoridade";
 
@@ -36,6 +38,7 @@ export default function Home() {
   const [copied, setCopied] = useState<"hook" | "post" | "full" | null>(null);
   const [neuralCount, setNeuralCount] = useState(0);
   const [lastContext, setLastContext] = useState<NeuralContext | null>(null);
+  const [showKeyModal, setShowKeyModal] = useState(false);
 
   useEffect(() => {
     setNeuralCount(getAllReferences().length);
@@ -49,6 +52,13 @@ export default function Home() {
 
   const generate = async () => {
     if (!idea.trim()) return;
+
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      setShowKeyModal(true);
+      return;
+    }
+
     setLoading(true);
     setError("");
     setResult(null);
@@ -64,7 +74,10 @@ export default function Home() {
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+        },
         body: JSON.stringify({
           idea,
           modes: selectedModes,
@@ -97,6 +110,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
+      <ApiKeyModal open={showKeyModal} onClose={() => setShowKeyModal(false)} />
+
       {/* Header */}
       <header className="border-b border-white/5 px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
@@ -108,20 +123,23 @@ export default function Home() {
               gerador de conteúdo viral para LinkedIn
             </p>
           </div>
-          <Link
-            href="/neural-base"
-            className="flex items-center gap-2 text-xs border border-white/10 hover:border-purple-500/40 hover:bg-purple-500/5 px-3 py-2 rounded-xl transition-all group"
-          >
-            <span>🧠</span>
-            <span className="text-white/40 group-hover:text-purple-400 transition-colors">
-              base neural
-            </span>
-            {neuralCount > 0 && (
-              <span className="bg-purple-500/20 text-purple-400 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                {neuralCount}
+          <div className="flex items-center gap-2">
+            <ApiKeyButton onClick={() => setShowKeyModal(true)} />
+            <Link
+              href="/neural-base"
+              className="flex items-center gap-2 text-xs border border-white/10 hover:border-purple-500/40 hover:bg-purple-500/5 px-3 py-2 rounded-xl transition-all group"
+            >
+              <span>🧠</span>
+              <span className="text-white/40 group-hover:text-purple-400 transition-colors">
+                base neural
               </span>
-            )}
-          </Link>
+              {neuralCount > 0 && (
+                <span className="bg-purple-500/20 text-purple-400 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                  {neuralCount}
+                </span>
+              )}
+            </Link>
+          </div>
         </div>
       </header>
 

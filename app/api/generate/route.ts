@@ -2,8 +2,8 @@ import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralContext } from "@/lib/neural/types";
 
-function getClient() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getClient(apiKey: string) {
+  return new OpenAI({ apiKey });
 }
 
 function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): string {
@@ -78,6 +78,15 @@ Post: 200-400 palavras, sem listas, parágrafos curtos com quebra de linha.`;
 }
 
 export async function POST(request: NextRequest) {
+  const apiKey = request.headers.get("x-api-key") || process.env.OPENAI_API_KEY || "";
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "API key não configurada. Clica em 'add key' no topo da página." },
+      { status: 401 }
+    );
+  }
+
   try {
     const { idea, modes, neuralContext } = await request.json();
 
@@ -85,7 +94,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Manda uma ideia bruta primeiro." }, { status: 400 });
     }
 
-    const completion = await getClient().chat.completions.create({
+    const completion = await getClient(apiKey).chat.completions.create({
       model: "gpt-4o",
       max_tokens: 2048,
       response_format: { type: "json_object" },

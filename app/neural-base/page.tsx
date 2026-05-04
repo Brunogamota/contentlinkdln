@@ -9,8 +9,10 @@ import {
   deleteReference,
   toggleStrongReference,
 } from "@/lib/neural/store";
+import { getApiKey } from "@/lib/settings";
 import { UploadZone } from "@/components/neural-base/UploadZone";
 import { ReferenceCard } from "@/components/neural-base/ReferenceCard";
+import { ApiKeyModal, ApiKeyButton } from "@/components/ApiKeyModal";
 
 export default function NeuralBasePage() {
   const [references, setReferences] = useState<NeuralReference[]>([]);
@@ -19,6 +21,7 @@ export default function NeuralBasePage() {
   const [search, setSearch] = useState("");
   const [uploadingCount, setUploadingCount] = useState(0);
   const [uploadedCount, setUploadedCount] = useState(0);
+  const [showKeyModal, setShowKeyModal] = useState(false);
 
   useEffect(() => {
     setReferences(getAllReferences());
@@ -27,6 +30,12 @@ export default function NeuralBasePage() {
   const refresh = () => setReferences(getAllReferences());
 
   const handleUpload = async (files: File[]) => {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      setShowKeyModal(true);
+      return;
+    }
+
     setIsUploading(true);
     setUploadErrors([]);
     setUploadingCount(files.length);
@@ -41,6 +50,7 @@ export default function NeuralBasePage() {
 
         const res = await fetch("/api/neural/upload", {
           method: "POST",
+          headers: { "x-api-key": apiKey },
           body: formData,
         });
 
@@ -87,6 +97,8 @@ export default function NeuralBasePage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
+      <ApiKeyModal open={showKeyModal} onClose={() => setShowKeyModal(false)} />
+
       {/* Header */}
       <header className="border-b border-white/5 px-6 py-4 sticky top-0 bg-[#0a0a0a]/95 backdrop-blur z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -109,6 +121,7 @@ export default function NeuralBasePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ApiKeyButton onClick={() => setShowKeyModal(true)} />
             <span className="text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-1 rounded-full">
               inteligência proprietária
             </span>
@@ -167,7 +180,7 @@ export default function NeuralBasePage() {
 
             {filtered.length === 0 ? (
               <p className="text-sm text-white/30 text-center py-8">
-                nenhuma referência com "{search}"
+                nenhuma referência com &ldquo;{search}&rdquo;
               </p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
