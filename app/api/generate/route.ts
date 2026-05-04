@@ -1,12 +1,53 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralContext } from "@/lib/neural/types";
+import { FounderDNA, ContentPillar } from "@/lib/founder-dna/types";
 
 function getClient(apiKey: string) {
   return new OpenAI({ apiKey });
 }
 
-function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): string {
+function buildDNASection(dna?: FounderDNA): string {
+  if (!dna || !dna.companyName) return "";
+  return `
+🧬 FOUNDER DNA (CALIBRA TUDO PRO ICP)
+
+EMPRESA: ${dna.companyName}${dna.companyDescription ? ` — ${dna.companyDescription}` : ""}
+${dna.whatYouSell ? `O QUE VENDE: ${dna.whatYouSell}` : ""}
+
+🎯 ICP — ÚNICA PESSOA QUE IMPORTA:
+- Cargo: ${dna.icpRole}
+- Dor que faz acordar de noite: ${dna.icpPain}
+${dna.icpDecisionMaker ? `- Quem decide compra: ${dna.icpDecisionMaker}` : ""}
+
+⚠️ TODA palavra do post precisa ressoar com ${dna.icpRole}. Se ${dna.icpRole} não engaja, o post FALHOU — não importa quanto alcance teve.
+
+VOCÊ (founder):
+${dna.founderStory}
+
+DIFERENCIAL: ${dna.uniqueDifferentiator}
+${dna.voiceTone ? `TOM: ${dna.voiceTone}` : ""}
+${dna.publicEnemies && dna.publicEnemies.length > 0
+    ? `INIMIGOS PÚBLICOS (use como combustível): ${dna.publicEnemies.join(" · ")}`
+    : ""}
+`;
+}
+
+function buildPillarSection(pillar?: ContentPillar): string {
+  if (!pillar) return "";
+  return `
+📌 PILAR DESTE POST: ${pillar.emoji} ${pillar.name}
+INTENÇÃO: ${pillar.intent}
+INSTRUÇÃO: ${pillar.promptGuidance}
+`;
+}
+
+function buildSystemPrompt(
+  modes: string[],
+  neuralContext?: NeuralContext,
+  dna?: FounderDNA,
+  pillar?: ContentPillar
+): string {
   const isPolemico = modes.includes("polemico");
   const isViral = modes.includes("viral");
   const isAutoridade = modes.includes("autoridade");
@@ -19,62 +60,65 @@ function buildSystemPrompt(modes: string[], neuralContext?: NeuralContext): stri
 
   const neuralSection = hasNeuralContext
     ? `
-🧠 CONTEXTO DA BASE NEURAL (USE COMO INTELIGÊNCIA, NÃO COPIE)
-${neuralContext.dominantPatterns.length > 0 ? `Padrões dominantes: ${neuralContext.dominantPatterns.join(" · ")}` : ""}
-${neuralContext.recommendedHookStyle ? `Estilo de hook: ${neuralContext.recommendedHookStyle}` : ""}
+🧠 BASE NEURAL (use como inteligência, NÃO copie)
+${neuralContext.dominantPatterns.length > 0 ? `Padrões: ${neuralContext.dominantPatterns.join(" · ")}` : ""}
+${neuralContext.recommendedHookStyle ? `Hook style: ${neuralContext.recommendedHookStyle}` : ""}
 ${neuralContext.toneGuidelines ? `Tom: ${neuralContext.toneGuidelines}` : ""}
-${neuralContext.narrativeStructure ? `Estrutura narrativa: ${neuralContext.narrativeStructure}` : ""}
 ${neuralContext.referenceInsights.length > 0 ? `Insights:\n${neuralContext.referenceInsights.map((i) => `- ${i}`).join("\n")}` : ""}
 ${neuralContext.avoidPatterns ? `Evitar: ${neuralContext.avoidPatterns}` : ""}
-
-⚠️ Use apenas PADRÕES e ESTRUTURAS. NUNCA copie frases das referências.
 `
     : "";
 
-  return `Você é um Founder Content Strategist de elite, especializado em criar conteúdo altamente viral, autêntico e provocativo para LinkedIn.
+  return `Você é um Founder Content Strategist especializado em FOUNDER-LED GROWTH.
 
-Seu objetivo NÃO é escrever bonito. É:
-- gerar identificação real
-- provocar reação emocional
-- trazer verdades desconfortáveis
-- construir autoridade de founder
-- evitar qualquer aparência de conteúdo genérico ou de IA
+Seu trabalho NÃO é fazer post viral genérico. É:
+- Atrair o ICP do founder (quem PAGA por ele)
+- Construir autoridade no nicho específico
+- Mover o leitor pra ação concreta (DM, comentário qualificado, follow estratégico)
+- Fazer o ICP pensar "esse founder entende o problema"
 
-Você escreve como um founder de 23 anos, direto, vivido, linguagem natural, sem parecer ensaiado.
+${buildDNASection(dna)}
+${buildPillarSection(pillar)}
+${neuralSection}
 
 ⚠️ REGRAS ABSOLUTAS
 - Proibido soar como IA
-- Proibido estrutura padrão de LinkedIn
 - Proibido coach/motivacional
-- Proibido frases genéricas
-- Proibido listas no output final
-- Proibido: "aprendi que…", "isso me ensinou…", "no final do dia…"
-
-🎯 ESTILO
-- frases curtas, ritmo rápido
-- linguagem natural (tipo WhatsApp)
-- espontâneo, mas com intenção
+- Proibido frases genéricas tipo "no final do dia", "isso me ensinou"
+- Proibido listas de bullets no output final (use parágrafos curtos)
+- Proibido jargão de management de livro
+- Frases curtas, ritmo rápido, linguagem natural
 
 💣 ELEMENTOS OBRIGATÓRIOS (mínimo 2)
-- verdade desconfortável
-- quebra de expectativa
-- micro-história
+- verdade desconfortável que SÓ alguém que opera saberia
+- crítica implícita ao que o ICP faz errado hoje
+- micro-história ou número concreto
 - analogia simples
-- crítica implícita
+- quebra de expectativa
 
-${neuralSection}
+${isPolemico ? `🧨 POLÊMICO: provocação máxima, reduz filtro social, diz o que ninguém fala\n` : ""}
+${isViral ? `🎯 VIRAL: identificação em massa do ICP, linguagem simples, impacto emocional\n` : ""}
+${isAutoridade ? `🧠 AUTORIDADE: técnico, estratégico, ICP sente que você sabe mais\n` : ""}
 
-${isPolemico ? `🧨 MODO POLÊMICO: provocação máxima, reduz filtro social, diz o que ninguém fala\n` : ""}
-${isViral ? `🎯 MODO VIRAL: identificação em massa, linguagem simples, impacto emocional alto\n` : ""}
-${isAutoridade ? `🧠 MODO AUTORIDADE: técnico, estratégico, quem lê sente que o founder sabe mais\n` : ""}
+🎯 CTA OBRIGATÓRIO (separado do post)
+Toda geração termina com um CTA orgânico e magnético. Tipos válidos:
+- LEAD MAGNET: "comenta 'X' que te mando Y" (Y = template, framework, planilha real que existe)
+- DM DIRETO: "se ${dna?.icpRole || "founder"} tá nessa, me chama no DM" (situação específica do ICP)
+- ENGAGEMENT LOOP: "concorda? me fala nos comentários como você lida com isso"
+- POLLING: "qual lado você tá? A ou B?"
 
-📦 OUTPUT: retorne APENAS este JSON:
+PROIBIDO no CTA:
+- "siga pra mais conteúdo"
+- "compre agora"
+- "link na bio"
+- coach/genérico
+
+📦 OUTPUT JSON (apenas isso):
 {
-  "hook": "o melhor hook",
-  "post": "o post completo"
-}
-
-Post: 200-400 palavras, sem listas, parágrafos curtos com quebra de linha.`;
+  "hook": "frase de abertura única, magnética, que para o scroll do ICP",
+  "post": "corpo do post 200-400 palavras, parágrafos curtos com quebra de linha, SEM o CTA no final",
+  "cta": "1-2 frases curtas que movem pra ação"
+}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -88,25 +132,29 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { idea, modes, neuralContext } = await request.json();
+    const { idea, modes, neuralContext, founderDNA, pillar, refineInstruction } = await request.json();
 
     if (!idea || typeof idea !== "string" || idea.trim().length === 0) {
       return NextResponse.json({ error: "Manda uma ideia bruta primeiro." }, { status: 400 });
     }
+
+    const userMessage = refineInstruction
+      ? `Ideia bruta: "${idea.trim()}"\n\nINSTRUÇÃO DE REFINO: ${refineInstruction}\n\nGere a nova versão aplicando o refino.`
+      : `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo pro LinkedIn.`;
 
     const completion = await getClient(apiKey).chat.completions.create({
       model: "gpt-4o",
       max_tokens: 2048,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: buildSystemPrompt(modes || [], neuralContext) },
-        { role: "user", content: `Ideia bruta: "${idea.trim()}"\n\nGere o conteúdo viral para LinkedIn.` },
+        { role: "system", content: buildSystemPrompt(modes || [], neuralContext, founderDNA, pillar) },
+        { role: "user", content: userMessage },
       ],
     });
 
     const raw = completion.choices[0]?.message?.content ?? "";
 
-    let parsed: { hook: string; post: string };
+    let parsed: { hook: string; post: string; cta: string };
     try {
       parsed = JSON.parse(raw);
     } catch {

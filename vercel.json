@@ -7,6 +7,12 @@
     },
     "app/api/neural/upload/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/series/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/analyze-linkedin/route.ts": {
+      "maxDuration": 60
     }
   }
 }
