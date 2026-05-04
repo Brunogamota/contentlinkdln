@@ -28,6 +28,12 @@
     },
     "app/api/inspiration/extract-image/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/brain/synthesize/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/brain/generate-from-aggregate/route.ts": {
+      "maxDuration": 60
     }
   }
 }

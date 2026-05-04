@@ -27,6 +27,7 @@ import {
   setInspirationStatus,
 } from "@/lib/inspiration/store";
 import { getRefineLabel } from "@/lib/inspiration/prompts/refine";
+import { autoTagFromAnalysis } from "@/lib/brain/autoTagger";
 
 type Tab = "reference" | "analysis" | "angles" | "editor" | "library";
 
@@ -98,15 +99,30 @@ export default function InspirationPage() {
     const id = currentInspirationId ?? newInspirationId();
     if (!currentInspirationId) setCurrentInspirationId(id);
     const existing = library.find((i) => i.id === id);
+    const finalAnalysis = updates.analysis ?? existing?.analysis;
+
+    // Auto-tag sempre que houver análise (recalcula ao atualizar)
+    let autoTags = existing?.autoTags ?? [];
+    let categories = existing?.categories ?? [];
+    if (finalAnalysis) {
+      const tagged = autoTagFromAnalysis(finalAnalysis);
+      autoTags = tagged.autoTags;
+      // mantém categorias manuais já adicionadas + adiciona auto
+      categories = Array.from(new Set([...(existing?.categories ?? []), ...tagged.categories]));
+    }
+
     const merged: SavedInspiration = {
       id,
       reference: updates.reference,
-      analysis: updates.analysis ?? existing?.analysis,
+      analysis: finalAnalysis,
       angles: updates.angles ?? existing?.angles,
       selectedAngleId: updates.selectedAngleId ?? existing?.selectedAngleId,
       finalPost: updates.finalPost ?? existing?.finalPost,
       status: updates.status ?? existing?.status ?? "novo",
       tags: updates.tags ?? existing?.tags ?? [],
+      categories,
+      autoTags,
+      manualTags: existing?.manualTags ?? [],
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

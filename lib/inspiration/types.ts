@@ -263,6 +263,14 @@ export interface SavedInspiration {
   finalPost?: GeneratedPost;
   status: InspirationStatus;
   tags: string[];
+  /** auto-extracted categories (PRESET_CATEGORIES ids) */
+  categories?: string[];
+  /** auto-extracted tags from analysis (archetype:X, hook:Y, tema:Z, emocao:W) */
+  autoTags?: string[];
+  /** manual tags added by user */
+  manualTags?: string[];
+  /** sinal de performance: usuário achou útil/inspirou */
+  performanceSignal?: "high" | "medium" | "low" | "untested";
   createdAt: string;
   updatedAt: string;
 }

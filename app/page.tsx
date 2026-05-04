@@ -199,6 +199,7 @@ export default function Home() {
             <NavLink href="/founder-dna" emoji="🧬" label="DNA" active={!!dna?.companyName} />
             <NavLink href="/neural-base" emoji="🧠" label="neural" badge={neuralCount} />
             <NavLink href="/inspiration" emoji="⚡" label="inspiration" />
+            <NavLink href="/brain" emoji="🧠" label="brain" />
             <NavLink href="/series" emoji="📚" label="series" />
             <NavLink href="/pipeline" emoji="🎯" label="pipeline" />
             <NavLink href="/analyze" emoji="🔍" label="analisar" />
