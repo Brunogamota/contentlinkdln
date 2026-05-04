@@ -5,18 +5,22 @@ import Link from "next/link";
 import { getNeuralContext } from "@/lib/neural/getNeuralContext";
 import { getAllReferences } from "@/lib/neural/store";
 import { getApiKey } from "@/lib/settings";
-import { getDNA, getPillars, hasDNA, savePublishedPost } from "@/lib/founder-dna/store";
+import { getDNA, getPillars, savePublishedPost } from "@/lib/founder-dna/store";
 import { pickPillarForIdea } from "@/lib/founder-dna/pillars";
 import { NeuralContext } from "@/lib/neural/types";
 import { FounderDNA, ContentPillar } from "@/lib/founder-dna/types";
 import { ApiKeyModal, ApiKeyButton } from "@/components/ApiKeyModal";
+import { AdvancedPostConfigPanel } from "@/components/AdvancedPostConfig";
+import { AdvancedPostConfig } from "@/lib/advanced-config/types";
+import { getAdvancedConfig, saveAdvancedConfig } from "@/lib/advanced-config/store";
+import { DEFAULT_CONFIG, resolveLengthRange } from "@/lib/advanced-config/defaults";
 
 type Mode = "polemico" | "viral" | "autoridade";
 
 interface GeneratedContent {
   hook: string;
   post: string;
-  cta: string;
+  cta: string | null;
 }
 
 const MODES: { id: Mode; label: string; emoji: string; desc: string }[] = [
@@ -48,12 +52,19 @@ export default function Home() {
   const [dna, setDNA] = useState<FounderDNA | null>(null);
   const [pillars, setPillars] = useState<ContentPillar[]>([]);
   const [published, setPublished] = useState(false);
+  const [advancedConfig, setAdvancedConfig] = useState<AdvancedPostConfig>(DEFAULT_CONFIG);
 
   useEffect(() => {
     setNeuralCount(getAllReferences().length);
     setDNA(getDNA());
     setPillars(getPillars());
+    setAdvancedConfig(getAdvancedConfig());
   }, []);
+
+  const updateAdvancedConfig = (next: AdvancedPostConfig) => {
+    setAdvancedConfig(next);
+    saveAdvancedConfig(next);
+  };
 
   const toggleMode = (mode: Mode) => {
     setSelectedModes((prev) =>
@@ -104,6 +115,7 @@ export default function Home() {
           founderDNA: dna,
           pillar,
           refineInstruction,
+          advancedConfig,
         }),
       });
 
@@ -137,14 +149,22 @@ export default function Home() {
       id: `post_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       hook: result.hook,
       post: result.post,
-      cta: result.cta,
+      cta: result.cta ?? "",
       pillarId,
       publishedAt: new Date().toISOString(),
     });
     setPublished(true);
   };
 
-  const fullPost = result ? `${result.hook}\n\n${result.post}\n\n${result.cta}` : "";
+  const fullPost = result
+    ? result.cta
+      ? `${result.hook}\n\n${result.post}\n\n${result.cta}`
+      : `${result.hook}\n\n${result.post}`
+    : "";
+
+  const lengthRange = resolveLengthRange(advancedConfig);
+  const postLen = result?.post.length ?? 0;
+  const inRange = result ? postLen >= lengthRange.min && postLen <= lengthRange.max : true;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -273,6 +293,9 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Advanced Config */}
+          <AdvancedPostConfigPanel config={advancedConfig} onChange={updateAdvancedConfig} />
+
           <button
             onClick={() => generate()}
             disabled={loading || !idea.trim()}
@@ -341,12 +364,34 @@ export default function Home() {
             {/* Post */}
             <Block label="Post" color="blue" copied={copied === "post"} onCopy={() => copyToClipboard(result.post, "post")}>
               <div className="text-white/85 text-sm leading-relaxed whitespace-pre-wrap">{result.post}</div>
+              <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs">
+                <span className="text-white/40">
+                  {postLen.toLocaleString("pt-BR")} caracteres
+                  <span className="text-white/20 ml-2">
+                    · alvo {lengthRange.min}–{lengthRange.max}
+                    {advancedConfig.hardLimit && <span className="text-amber-400/70 ml-1">(rígido)</span>}
+                  </span>
+                </span>
+                <span
+                  className={
+                    inRange
+                      ? "text-green-400/80"
+                      : advancedConfig.hardLimit
+                      ? "text-red-400"
+                      : "text-amber-400/80"
+                  }
+                >
+                  {inRange ? "dentro do range ✓" : "fora do range"}
+                </span>
+              </div>
             </Block>
 
-            {/* CTA */}
-            <Block label="CTA Magnético" color="green" copied={copied === "cta"} onCopy={() => copyToClipboard(result.cta, "cta")}>
-              <p className="text-white/90 text-sm leading-relaxed">{result.cta}</p>
-            </Block>
+            {/* CTA — só renderiza se houver */}
+            {result.cta && (
+              <Block label="CTA Magnético" color="green" copied={copied === "cta"} onCopy={() => copyToClipboard(result.cta!, "cta")}>
+                <p className="text-white/90 text-sm leading-relaxed">{result.cta}</p>
+              </Block>
+            )}
 
             <div className="mt-2">
               <span className="text-xs text-white/30 uppercase tracking-widest mb-2 block">refinar</span>
