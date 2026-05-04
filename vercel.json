@@ -13,6 +13,21 @@
     },
     "app/api/analyze-linkedin/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/inspiration/analyze/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/inspiration/angles/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/inspiration/generate-post/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/inspiration/refine/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/inspiration/extract-image/route.ts": {
+      "maxDuration": 60
     }
   }
 }
