@@ -11,9 +11,9 @@ import { NeuralContext } from "@/lib/neural/types";
 import { FounderDNA, ContentPillar } from "@/lib/founder-dna/types";
 import { ApiKeyModal, ApiKeyButton } from "@/components/ApiKeyModal";
 import { AdvancedPostConfigPanel } from "@/components/AdvancedPostConfig";
-import { AdvancedPostConfig } from "@/lib/advanced-config/types";
+import { AdvancedPostConfig, HookScore, AntiAIReport } from "@/lib/advanced-config/types";
 import { getAdvancedConfig, saveAdvancedConfig } from "@/lib/advanced-config/store";
-import { DEFAULT_CONFIG, resolveLengthRange } from "@/lib/advanced-config/defaults";
+import { DEFAULT_CONFIG, resolveLengthRange, resolveWordTarget } from "@/lib/advanced-config/defaults";
 
 type Mode = "polemico" | "viral" | "autoridade";
 
@@ -21,6 +21,9 @@ interface GeneratedContent {
   hook: string;
   post: string;
   cta: string | null;
+  hookAlternatives?: HookScore[];
+  wordCount: number;
+  antiAIReport?: AntiAIReport;
 }
 
 const MODES: { id: Mode; label: string; emoji: string; desc: string }[] = [
@@ -30,11 +33,15 @@ const MODES: { id: Mode; label: string; emoji: string; desc: string }[] = [
 ];
 
 const REFINE_OPTIONS = [
-  { label: "mais cru", instruction: "deixa mais cru, mais direto, menos polido" },
-  { label: "mais curto", instruction: "reduz pra metade do tamanho mantendo o impacto" },
-  { label: "outro hook", instruction: "mantém o post mas troca completamente o hook" },
-  { label: "+ polêmico", instruction: "aumenta a polêmica, mais provocador, menos filtro" },
-  { label: "+ história", instruction: "incorpora uma micro-história concreta no meio" },
+  { label: "destruir IA", instruction: "Reescreva removendo qualquer cara de IA, quebrando ritmo, adicionando especificidade, exemplos reais e imperfeição humana." },
+  { label: "expandir", instruction: "Expanda mantendo o mesmo estilo, adicionando exemplos concretos, bastidores e densidade, sem parecer enrolação." },
+  { label: "mais humano", instruction: "Aumenta a imperfeição humana, quebra de ritmo, frases menos certinhas, parecendo escrito por humano cansado." },
+  { label: "mais técnico", instruction: "Adicione profundidade técnica usando termos do domínio (chargeback, fallback, adquirente, split, liquidação, conciliação, antifraude). Mantenha o tom." },
+  { label: "+ polêmico", instruction: "Aumente a polêmica, mais provocador, menos filtro. Confronte o mercado." },
+  { label: "+ história", instruction: "Incorpore uma micro-história concreta de bastidor no meio." },
+  { label: "mais cru", instruction: "Deixa mais cru, mais direto, menos polido. Frase quebrada OK." },
+  { label: "mais curto", instruction: "Reduz pra metade do tamanho mantendo o impacto." },
+  { label: "outro hook", instruction: "Mantém o post mas troca completamente o hook." },
 ];
 
 export default function Home() {
@@ -163,8 +170,17 @@ export default function Home() {
     : "";
 
   const lengthRange = resolveLengthRange(advancedConfig);
+  const wordTargetInfo = resolveWordTarget(advancedConfig);
   const postLen = result?.post.length ?? 0;
-  const inRange = result ? postLen >= lengthRange.min && postLen <= lengthRange.max : true;
+  const wordCount = result?.wordCount ?? 0;
+  const inCharRange = result ? postLen >= lengthRange.min && postLen <= lengthRange.max : true;
+  const inWordRange = result ? wordCount >= wordTargetInfo.min && wordCount <= wordTargetInfo.max : true;
+  const aiRisk = result?.antiAIReport?.aiRiskScore ?? 0;
+
+  const swapHook = (newHook: string) => {
+    if (!result) return;
+    setResult({ ...result, hook: newHook });
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -356,35 +372,92 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Hook */}
+            {/* Métricas — anti-IA + word count + char count */}
+            <div className="grid grid-cols-3 gap-2">
+              <MetricCard
+                label="palavras"
+                value={wordCount.toLocaleString("pt-BR")}
+                hint={`alvo ${wordTargetInfo.target}`}
+                tone={inWordRange ? "good" : "warn"}
+              />
+              <MetricCard
+                label="caracteres"
+                value={postLen.toLocaleString("pt-BR")}
+                hint={`${lengthRange.min}–${lengthRange.max}`}
+                tone={inCharRange ? "good" : advancedConfig.hardLimit ? "bad" : "warn"}
+              />
+              <MetricCard
+                label="risco IA"
+                value={`${aiRisk}/10`}
+                hint={aiRisk <= 3 ? "humano" : aiRisk <= 6 ? "ok" : "alto"}
+                tone={aiRisk <= 3 ? "good" : aiRisk <= 6 ? "warn" : "bad"}
+              />
+            </div>
+
+            {/* Hook + Alternatives */}
             <Block label="Hook" color="blue" copied={copied === "hook"} onCopy={() => copyToClipboard(result.hook, "hook")}>
               <p className="text-white font-semibold text-base leading-snug">{result.hook}</p>
             </Block>
 
+            {result.hookAlternatives && result.hookAlternatives.length > 1 && (
+              <details className="bg-white/[0.02] border border-white/[0.06] rounded-xl group">
+                <summary className="cursor-pointer px-5 py-3 text-xs text-white/50 hover:text-white/80 flex items-center justify-between">
+                  <span>🪝 ver {result.hookAlternatives.length} variações de hook (clica pra trocar)</span>
+                  <span className="text-white/30 group-open:rotate-180 transition-transform">▾</span>
+                </summary>
+                <div className="px-5 pb-4 space-y-2">
+                  {result.hookAlternatives
+                    .map((h, i) => ({ h, i }))
+                    .sort((a, b) => b.h.total - a.h.total)
+                    .map(({ h, i }) => {
+                      const isActive = h.text === result.hook;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => swapHook(h.text)}
+                          className={`w-full text-left p-3 rounded-lg border transition-all ${
+                            isActive
+                              ? "bg-blue-500/10 border-blue-500/40"
+                              : "bg-white/[0.02] border-white/[0.06] hover:border-white/20"
+                          }`}
+                        >
+                          <p className={`text-sm ${isActive ? "text-white font-medium" : "text-white/75"}`}>{h.text}</p>
+                          <div className="flex items-center gap-3 mt-2 text-[10px] text-white/40 flex-wrap">
+                            <span>curio: {h.curiosity}</span>
+                            <span>tens: {h.tension}</span>
+                            <span>esp: {h.specificity}</span>
+                            <span>orig: {h.originality}</span>
+                            <span>hum: {h.humanFeel}</span>
+                            <span className={`ml-auto font-mono ${isActive ? "text-blue-300" : "text-white/60"}`}>
+                              total {h.total}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </details>
+            )}
+
             {/* Post */}
             <Block label="Post" color="blue" copied={copied === "post"} onCopy={() => copyToClipboard(result.post, "post")}>
               <div className="text-white/85 text-sm leading-relaxed whitespace-pre-wrap">{result.post}</div>
-              <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs">
-                <span className="text-white/40">
-                  {postLen.toLocaleString("pt-BR")} caracteres
-                  <span className="text-white/20 ml-2">
-                    · alvo {lengthRange.min}–{lengthRange.max}
-                    {advancedConfig.hardLimit && <span className="text-amber-400/70 ml-1">(rígido)</span>}
-                  </span>
-                </span>
-                <span
-                  className={
-                    inRange
-                      ? "text-green-400/80"
-                      : advancedConfig.hardLimit
-                      ? "text-red-400"
-                      : "text-amber-400/80"
-                  }
-                >
-                  {inRange ? "dentro do range ✓" : "fora do range"}
-                </span>
-              </div>
             </Block>
+
+            {/* Anti-IA report — só se tiver padrão detectado */}
+            {result.antiAIReport && result.antiAIReport.detectedPatterns.length > 0 && (
+              <div className="bg-amber-500/[0.04] border border-amber-500/20 rounded-xl p-4">
+                <p className="text-xs text-amber-300 uppercase tracking-widest mb-2">⚠️ padrões de IA detectados</p>
+                <ul className="space-y-1">
+                  {result.antiAIReport.detectedPatterns.map((p, i) => (
+                    <li key={i} className="text-xs text-amber-200/70">→ {p}</li>
+                  ))}
+                </ul>
+                <p className="text-[11px] text-amber-300/50 mt-2">
+                  Use o botão &quot;destruir IA&quot; abaixo pra reescrever.
+                </p>
+              </div>
+            )}
 
             {/* CTA — só renderiza se houver */}
             {result.cta && (
@@ -495,5 +568,30 @@ function Spinner() {
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone: "good" | "warn" | "bad";
+}) {
+  const accent = {
+    good: "text-green-400/90 border-green-500/20 bg-green-500/[0.04]",
+    warn: "text-amber-400/90 border-amber-500/20 bg-amber-500/[0.04]",
+    bad: "text-red-400/90 border-red-500/20 bg-red-500/[0.04]",
+  }[tone];
+  return (
+    <div className={`border ${accent} rounded-xl p-3`}>
+      <p className="text-[10px] uppercase tracking-widest text-white/40">{label}</p>
+      <p className="text-lg font-mono font-semibold mt-0.5">{value}</p>
+      <p className="text-[10px] text-white/30 mt-0.5">{hint}</p>
+    </div>
   );
 }

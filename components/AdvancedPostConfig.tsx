@@ -13,6 +13,11 @@ import {
   PostStructure,
   CreativeVariation,
   SentenceStyle,
+  StructureMode,
+  HookStyle,
+  EndingStyle,
+  RebornMention,
+  OutputFormat,
   PresetName,
 } from "@/lib/advanced-config/types";
 import { PRESETS, DEFAULT_CONFIG } from "@/lib/advanced-config/defaults";
@@ -74,38 +79,133 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
       </div>
 
       <div className="p-4 sm:p-5 space-y-6">
-        {/* 1. Tamanho */}
+        {/* PIPELINE — toggles que controlam o motor de geração */}
+        <Section title="Motor de geração" emoji="🧠">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Toggle
+              label="usar DNA do autor (Bruno)"
+              value={config.useAuthorDNA}
+              onChange={(v) => update("useAuthorDNA", v)}
+            />
+            <Toggle
+              label="gerar variações de hook (5)"
+              value={config.generateHookVariations}
+              onChange={(v) => update("generateHookVariations", v)}
+            />
+          </div>
+        </Section>
+
+        <Divider />
+
+        {/* CÉREBRO DO BRUNO — Sliders 0-10 */}
+        <Section title="Cérebro do Bruno (controle fino)" emoji="🎚️">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <Slider
+              label="Intensidade"
+              value={config.intensitySlider}
+              onChange={(v) => update("intensitySlider", v)}
+              hint=">=8: cortante e sem filtro"
+            />
+            <Slider
+              label="Polêmica"
+              value={config.controversySlider}
+              onChange={(v) => update("controversySlider", v)}
+              hint=">=8: confronto direto ao mercado"
+            />
+            <Slider
+              label="Autoridade"
+              value={config.authoritySlider}
+              onChange={(v) => update("authoritySlider", v)}
+              hint=">=8: precisão técnica e bastidor operacional"
+            />
+            <Slider
+              label="Storytelling"
+              value={config.storytellingSlider}
+              onChange={(v) => update("storytellingSlider", v)}
+              hint=">=8: cena real e progressão narrativa"
+            />
+            <Slider
+              label="Profundidade técnica"
+              value={config.technicalDepth}
+              onChange={(v) => update("technicalDepth", v)}
+              hint=">=8: usa termos do domínio (chargeback, fallback, adquirente…)"
+            />
+            <Slider
+              label="Peso emocional"
+              value={config.emotionalWeight}
+              onChange={(v) => update("emotionalWeight", v)}
+              hint=">=8: traz custo psicológico real"
+            />
+            <Slider
+              label="Imperfeição humana"
+              value={config.humanImperfection}
+              onChange={(v) => update("humanImperfection", v)}
+              hint=">=8: quebra de ritmo, frase incompleta OK"
+            />
+            <Slider
+              label="Sutileza comercial"
+              value={config.salesSubtlety}
+              onChange={(v) => update("salesSubtlety", v)}
+              hint=">=8: zero pitch, Reborn só como contexto"
+            />
+            <Slider
+              label="Anti-IA"
+              value={config.antiAILevel}
+              onChange={(v) => update("antiAILevel", v)}
+              hint=">=8: ativa rewrite automático"
+            />
+          </div>
+        </Section>
+
+        <Divider />
+
+        {/* Tamanho */}
         <Section title="Tamanho do post" emoji="📏">
           <Seg<ContentLengthMode>
             value={config.contentLengthMode}
             onChange={(v) => update("contentLengthMode", v)}
             options={[
-              { value: "short", label: "curto", hint: "até 600" },
-              { value: "medium", label: "médio", hint: "600–1200" },
-              { value: "long", label: "longo", hint: "1200–2500" },
+              { value: "short", label: "curto", hint: "300–600 pal" },
+              { value: "medium", label: "médio", hint: "700–1200 pal" },
+              { value: "long", label: "longo", hint: "1200–2000 pal" },
+              { value: "deep_dive", label: "deep dive", hint: "2000–3500 pal" },
               { value: "custom", label: "custom" },
             ]}
           />
+          <Field label={`Word target: ${config.wordTarget}`}>
+            <input
+              type="number"
+              min={100}
+              max={5000}
+              step={50}
+              value={config.wordTarget}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (Number.isFinite(n)) update("wordTarget", n);
+              }}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+            />
+          </Field>
           {config.contentLengthMode === "custom" && (
             <div className="grid grid-cols-2 gap-2 mt-2">
               <NumberInput
-                label="mínimo"
+                label="min chars"
                 value={config.minChars}
                 onChange={(v) => update("minChars", v)}
                 min={50}
-                max={5000}
+                max={10000}
               />
               <NumberInput
-                label="máximo"
+                label="max chars"
                 value={config.maxChars}
                 onChange={(v) => update("maxChars", v)}
                 min={100}
-                max={5000}
+                max={10000}
               />
             </div>
           )}
           <Toggle
-            label="respeitar limite rigidamente"
+            label="respeitar limite rigidamente (chars)"
             value={config.hardLimit}
             onChange={(v) => update("hardLimit", v)}
           />
@@ -113,9 +213,78 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
 
         <Divider />
 
-        {/* 2. Tom e tensão */}
-        <Section title="Tom e tensão" emoji="🔥">
-          <Field label="Intensidade">
+        {/* Estrutura + Hook + Final + Reborn + Formato */}
+        <Section title="Arquitetura do post" emoji="🏗️">
+          <Field label="Estrutura">
+            <Seg<StructureMode>
+              value={config.structureMode}
+              onChange={(v) => update("structureMode", v)}
+              options={[
+                { value: "whatsapp", label: "WhatsApp" },
+                { value: "storytelling", label: "Storytelling" },
+                { value: "essay", label: "Ensaio" },
+                { value: "founder_rant", label: "Founder Rant" },
+                { value: "technical_breakdown", label: "Technical Breakdown" },
+              ]}
+            />
+          </Field>
+          <Field label="Tipo de hook">
+            <Seg<HookStyle>
+              value={config.hookStyle}
+              onChange={(v) => update("hookStyle", v)}
+              options={[
+                { value: "dangerous_opinion", label: "opinião perigosa" },
+                { value: "specific_observation", label: "observação específica" },
+                { value: "confession", label: "confissão" },
+                { value: "market_attack", label: "ataque ao mercado" },
+                { value: "counterintuitive", label: "contraintuitivo" },
+                { value: "story_opening", label: "abertura de história" },
+              ]}
+            />
+          </Field>
+          <Field label="Final">
+            <Seg<EndingStyle>
+              value={config.endingStyle}
+              onChange={(v) => update("endingStyle", v)}
+              options={[
+                { value: "punch", label: "soco seco" },
+                { value: "open_loop", label: "loop aberto" },
+                { value: "reflection", label: "reflexão" },
+                { value: "provocation", label: "provocação" },
+                { value: "soft_cta", label: "CTA sutil" },
+              ]}
+            />
+          </Field>
+          <Field label="Menção à Reborn">
+            <Seg<RebornMention>
+              value={config.rebornMention}
+              onChange={(v) => update("rebornMention", v)}
+              options={[
+                { value: "none", label: "nenhuma" },
+                { value: "subtle", label: "sutil" },
+                { value: "contextual", label: "contextual" },
+                { value: "direct", label: "direta" },
+              ]}
+            />
+          </Field>
+          <Field label="Formato de saída">
+            <Seg<OutputFormat>
+              value={config.outputFormat}
+              onChange={(v) => update("outputFormat", v)}
+              options={[
+                { value: "linkedin", label: "LinkedIn" },
+                { value: "newsletter", label: "Newsletter" },
+                { value: "twitter_thread", label: "Thread X" },
+              ]}
+            />
+          </Field>
+        </Section>
+
+        <Divider />
+
+        {/* Tom segmentado clássico — kept for backward compatibility */}
+        <Section title="Tom (segmentado, broad strokes)" emoji="🎯">
+          <Field label="Intensidade (segmento)">
             <Seg<Intensity>
               value={config.intensity}
               onChange={(v) => update("intensity", v)}
@@ -127,7 +296,7 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
               ]}
             />
           </Field>
-          <Field label="Polêmica">
+          <Field label="Polêmica (segmento)">
             <Seg<ControversyLevel>
               value={config.controversyLevel}
               onChange={(v) => update("controversyLevel", v)}
@@ -139,13 +308,7 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
               ]}
             />
           </Field>
-        </Section>
-
-        <Divider />
-
-        {/* 3. Narrativa */}
-        <Section title="Narrativa" emoji="📖">
-          <Field label="Storytelling">
+          <Field label="Storytelling (segmento)">
             <Seg<StorytellingLevel>
               value={config.storytellingLevel}
               onChange={(v) => update("storytellingLevel", v)}
@@ -157,23 +320,11 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
               ]}
             />
           </Field>
-          <Field label="Estrutura">
-            <Seg<PostStructure>
-              value={config.postStructure}
-              onChange={(v) => update("postStructure", v)}
-              options={[
-                { value: "classic", label: "clássico" },
-                { value: "story_insight", label: "história" },
-                { value: "bullets_punch", label: "bullets" },
-                { value: "free_flow", label: "fluxo livre" },
-              ]}
-            />
-          </Field>
         </Section>
 
         <Divider />
 
-        {/* 4. Estratégia */}
+        {/* Estratégia */}
         <Section title="Estratégia" emoji="🎯">
           <Field label="Objetivo">
             <Seg<PostGoal>
@@ -205,7 +356,7 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
 
         <Divider />
 
-        {/* 5. Estilo */}
+        {/* Estilo */}
         <Section title="Estilo" emoji="🎨">
           <Field label="Humanização">
             <Seg<HumanizationLevel>
@@ -219,7 +370,7 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
               ]}
             />
           </Field>
-          <Field label="Variação criativa">
+          <Field label="Variação criativa (temperature)">
             <Seg<CreativeVariation>
               value={config.creativeVariation}
               onChange={(v) => update("creativeVariation", v)}
@@ -242,12 +393,24 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
               ]}
             />
           </Field>
+          <Field label="Estrutura clássica (legacy)">
+            <Seg<PostStructure>
+              value={config.postStructure}
+              onChange={(v) => update("postStructure", v)}
+              options={[
+                { value: "classic", label: "clássica" },
+                { value: "story_insight", label: "história+insight" },
+                { value: "bullets_punch", label: "bullets" },
+                { value: "free_flow", label: "fluxo livre" },
+              ]}
+            />
+          </Field>
         </Section>
 
         <Divider />
 
-        {/* 6. Anti-IA */}
-        <Section title="Anti-IA" emoji="🚫">
+        {/* Anti-IA */}
+        <Section title="Anti-IA (toggles finos)" emoji="🚫">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Toggle
               label="evitar clichês de LinkedIn"
@@ -260,7 +423,7 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
               onChange={(v) => update("avoidMotivationalTone", v)}
             />
             <Toggle
-              label="evitar estrutura perfeita demais"
+              label="evitar estrutura perfeita"
               value={config.avoidPerfectStructure}
               onChange={(v) => update("avoidPerfectStructure", v)}
             />
@@ -416,6 +579,45 @@ function NumberInput({
         className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-blue-500/50 transition-all"
       />
     </label>
+  );
+}
+
+function Slider({
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  hint?: string;
+}) {
+  const intensityColor =
+    value >= 9
+      ? "text-red-400"
+      : value >= 7
+      ? "text-amber-400"
+      : value >= 4
+      ? "text-blue-300"
+      : "text-white/40";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] text-white/65">{label}</span>
+        <span className={`text-[12px] font-mono tabular-nums ${intensityColor}`}>{value}</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={10}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        className="w-full h-1.5 bg-white/[0.05] rounded-full appearance-none cursor-pointer accent-blue-500"
+      />
+      {hint && <p className="text-[10px] text-white/30 leading-tight">{hint}</p>}
+    </div>
   );
 }
 

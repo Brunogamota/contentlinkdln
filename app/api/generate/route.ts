@@ -2,140 +2,52 @@ import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { NeuralContext } from "@/lib/neural/types";
 import { FounderDNA, ContentPillar } from "@/lib/founder-dna/types";
-import { AdvancedPostConfig } from "@/lib/advanced-config/types";
-import { buildAdvancedConfigInstructions, shouldOmitCTA } from "@/lib/advanced-config/promptBuilder";
-import { resolveLengthRange, temperatureFor, DEFAULT_CONFIG } from "@/lib/advanced-config/defaults";
+import {
+  AdvancedPostConfig,
+  GenerationResult,
+  HookScore,
+} from "@/lib/advanced-config/types";
+import {
+  buildFinalSystemPrompt,
+  shouldOmitCTA,
+} from "@/lib/advanced-config/promptBuilder";
+import {
+  resolveLengthRange,
+  resolveWordTarget,
+  temperatureFor,
+  countWords,
+  DEFAULT_CONFIG,
+} from "@/lib/advanced-config/defaults";
+import { validateAntiAI, buildAntiAIRewriteInstruction } from "@/lib/advanced-config/antiAI";
 
 function getClient(apiKey: string) {
   return new OpenAI({ apiKey });
 }
 
-function buildDNASection(dna?: FounderDNA): string {
-  if (!dna || !dna.companyName) return "";
-  return `
-🧬 FOUNDER DNA (calibra tudo pro ICP)
-
-EMPRESA: ${dna.companyName}${dna.companyDescription ? ` — ${dna.companyDescription}` : ""}
-${dna.whatYouSell ? `O QUE VENDE: ${dna.whatYouSell}` : ""}
-
-🎯 ICP — ÚNICA PESSOA QUE IMPORTA:
-- Cargo: ${dna.icpRole}
-- Dor que faz acordar de noite: ${dna.icpPain}
-${dna.icpDecisionMaker ? `- Quem decide compra: ${dna.icpDecisionMaker}` : ""}
-
-⚠️ TODA palavra do post precisa ressoar com ${dna.icpRole}. Se ${dna.icpRole} não engaja, o post FALHOU.
-
-VOCÊ (founder):
-${dna.founderStory}
-
-DIFERENCIAL: ${dna.uniqueDifferentiator}
-${dna.voiceTone ? `TOM BASE: ${dna.voiceTone}` : ""}
-${dna.publicEnemies && dna.publicEnemies.length > 0
-    ? `INIMIGOS PÚBLICOS (combustível pra polêmica): ${dna.publicEnemies.join(" · ")}`
-    : ""}
-`;
+interface RawModelResponse {
+  hook?: string;
+  post?: string;
+  cta?: string | null;
+  hookAlternatives?: HookScore[];
+  winnerIndex?: number;
 }
 
-function buildPillarSection(pillar?: ContentPillar): string {
-  if (!pillar) return "";
-  return `
-📌 PILAR DESTE POST: ${pillar.emoji} ${pillar.name}
-INTENÇÃO: ${pillar.intent}
-INSTRUÇÃO: ${pillar.promptGuidance}
-`;
+function parseSafe(raw: string): RawModelResponse {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }
 
-function buildSystemPrompt(
-  modes: string[],
-  neuralContext: NeuralContext | undefined,
-  dna: FounderDNA | undefined,
-  pillar: ContentPillar | undefined,
-  advancedConfig: AdvancedPostConfig
-): string {
-  const isPolemico = modes.includes("polemico");
-  const isViral = modes.includes("viral");
-  const isAutoridade = modes.includes("autoridade");
-
-  const hasNeuralContext =
-    neuralContext &&
-    (neuralContext.dominantPatterns.length > 0 ||
-      neuralContext.recommendedHookStyle ||
-      neuralContext.referenceInsights.length > 0);
-
-  const neuralSection = hasNeuralContext
-    ? `
-🧠 BASE NEURAL (use como inteligência, NÃO copie)
-${neuralContext.dominantPatterns.length > 0 ? `Padrões: ${neuralContext.dominantPatterns.join(" · ")}` : ""}
-${neuralContext.recommendedHookStyle ? `Hook style: ${neuralContext.recommendedHookStyle}` : ""}
-${neuralContext.toneGuidelines ? `Tom: ${neuralContext.toneGuidelines}` : ""}
-${neuralContext.referenceInsights.length > 0 ? `Insights:\n${neuralContext.referenceInsights.map((i) => `- ${i}`).join("\n")}` : ""}
-${neuralContext.avoidPatterns ? `Evitar: ${neuralContext.avoidPatterns}` : ""}
-`
-    : "";
-
-  const omitCTA = shouldOmitCTA(advancedConfig);
-
-  const outputSchema = omitCTA
-    ? `📦 OUTPUT JSON (apenas isso):
-{
-  "hook": "frase de abertura magnética que para o scroll do ICP",
-  "post": "corpo do post no tamanho configurado, parágrafos curtos, fechando por si só (SEM CTA explícito)",
-  "cta": null
-}`
-    : `📦 OUTPUT JSON (apenas isso):
-{
-  "hook": "frase de abertura magnética que para o scroll do ICP",
-  "post": "corpo do post no tamanho configurado, parágrafos curtos com quebra de linha, SEM o CTA no final",
-  "cta": "1-2 frases curtas que movem pra ação conforme o tipo de CTA configurado"
-}`;
-
-  return `Você é um Founder Content Strategist sênior, especializado em FOUNDER-LED GROWTH.
-
-Seu trabalho NÃO é fazer post viral genérico. É:
-- Atrair o ICP do founder (quem PAGA por ele)
-- Construir autoridade no nicho específico
-- Mover o leitor pra ação concreta
-- Fazer o ICP pensar "esse founder entende o problema de verdade"
-
-${buildDNASection(dna)}
-${buildPillarSection(pillar)}
-${neuralSection}
-
-${buildAdvancedConfigInstructions(advancedConfig)}
-
-⚠️ REGRAS ABSOLUTAS (sobrepõem qualquer config conflitante)
-- NUNCA soar como post genérico de LinkedIn
-- NUNCA usar tom de coach
-- NUNCA usar frases tipo "no final do dia", "isso me ensinou", "aprendi que", "a verdade é que"
-- NÃO escrever texto perfeito demais
-- Preferir frases com tensão, bastidor e visão de operador
-- Linguagem simples, direta, humana
-- Sem jargão de management/livro de negócios
-
-${isPolemico ? `🧨 MODO POLÊMICO: provocação máxima, reduz filtro social\n` : ""}${isViral ? `🎯 MODO VIRAL: identificação em massa do ICP\n` : ""}${isAutoridade ? `🧠 MODO AUTORIDADE: técnico, ICP sente que você sabe mais\n` : ""}
-${outputSchema}`;
-}
-
-function isPostInRange(post: string, config: AdvancedPostConfig): boolean {
-  const { min, max } = resolveLengthRange(config);
-  const len = post.length;
-  return len >= min && len <= max;
-}
-
-function buildRetryMessage(config: AdvancedPostConfig, currentLength: number): string {
-  const { min, max } = resolveLengthRange(config);
-  return `O post anterior tem ${currentLength} caracteres, fora do limite RÍGIDO de ${min}–${max}. Reescreva o POST (apenas o campo "post") respeitando exatamente esse intervalo. Mantenha o hook e o cta. Retorne o mesmo JSON com "post" ajustado.`;
-}
-
-interface GenerateResult {
-  hook: string;
-  post: string;
-  cta: string | null;
+function pickHookFromAlternatives(alts: HookScore[] | undefined, winnerIndex?: number): string | null {
+  if (!alts || alts.length === 0) return null;
+  const idx = typeof winnerIndex === "number" && alts[winnerIndex] ? winnerIndex : alts.reduce((bestIdx, h, i, all) => (h.total > all[bestIdx].total ? i : bestIdx), 0);
+  return alts[idx]?.text ?? null;
 }
 
 export async function POST(request: NextRequest) {
   const apiKey = request.headers.get("x-api-key") || process.env.OPENAI_API_KEY || "";
-
   if (!apiKey) {
     return NextResponse.json(
       { error: "API key não configurada. Clica em 'add key' no topo da página." },
@@ -151,27 +63,54 @@ export async function POST(request: NextRequest) {
       founderDNA?: FounderDNA;
       pillar?: ContentPillar;
       refineInstruction?: string;
-      advancedConfig?: AdvancedPostConfig;
+      advancedConfig?: Partial<AdvancedPostConfig>;
     };
 
     const { idea, modes, neuralContext, founderDNA, pillar, refineInstruction } = body;
-    const advancedConfig: AdvancedPostConfig = { ...DEFAULT_CONFIG, ...(body.advancedConfig || {}) };
+    const config: AdvancedPostConfig = { ...DEFAULT_CONFIG, ...(body.advancedConfig || {}) };
 
     if (!idea || typeof idea !== "string" || idea.trim().length === 0) {
       return NextResponse.json({ error: "Manda uma ideia bruta primeiro." }, { status: 400 });
     }
 
-    const userMessage = refineInstruction
-      ? `Ideia bruta: "${idea.trim()}"\n\nINSTRUÇÃO DE REFINO: ${refineInstruction}\n\nGere a nova versão aplicando o refino e respeitando todas as configurações avançadas.`
-      : `Ideia bruta: "${idea.trim()}"\n\nGere o post seguindo TODAS as configurações avançadas e o Founder DNA.`;
+    // Insights da base neural
+    const neuralInsights: string[] = [];
+    if (neuralContext) {
+      if (neuralContext.dominantPatterns?.length) {
+        neuralInsights.push(`Padrões dominantes: ${neuralContext.dominantPatterns.join(" · ")}`);
+      }
+      if (neuralContext.recommendedHookStyle) {
+        neuralInsights.push(`Hook style aprendido: ${neuralContext.recommendedHookStyle}`);
+      }
+      if (neuralContext.toneGuidelines) {
+        neuralInsights.push(`Tom aprendido: ${neuralContext.toneGuidelines}`);
+      }
+      if (neuralContext.referenceInsights?.length) {
+        neuralInsights.push(...neuralContext.referenceInsights);
+      }
+      if (neuralContext.avoidPatterns) {
+        neuralInsights.push(`EVITAR: ${neuralContext.avoidPatterns}`);
+      }
+    }
 
-    const systemPrompt = buildSystemPrompt(modes || [], neuralContext, founderDNA, pillar, advancedConfig);
-    const temperature = temperatureFor(advancedConfig.creativeVariation);
+    const systemPrompt = buildFinalSystemPrompt({
+      config,
+      founderDNA,
+      pillar,
+      neuralInsights,
+      modes,
+    });
+
+    const userMessage = refineInstruction
+      ? `IDEIA BRUTA: "${idea.trim()}"\n\n🛠️ INSTRUÇÃO DE REFINO: ${refineInstruction}\n\nReescreva aplicando o refino e respeitando TODAS as diretivas avançadas.`
+      : `IDEIA BRUTA: "${idea.trim()}"\n\nGere o post seguindo TODAS as diretivas. Respeite o tamanho-alvo em palavras.`;
+
+    const temperature = temperatureFor(config.creativeVariation);
     const client = getClient(apiKey);
 
     const completion = await client.chat.completions.create({
       model: "gpt-4o",
-      max_tokens: 2048,
+      max_tokens: 4096,
       temperature,
       response_format: { type: "json_object" },
       messages: [
@@ -181,48 +120,118 @@ export async function POST(request: NextRequest) {
     });
 
     const raw = completion.choices[0]?.message?.content ?? "";
+    const parsed = parseSafe(raw);
 
-    let parsed: GenerateResult;
-    try {
-      const tmp = JSON.parse(raw) as { hook?: string; post?: string; cta?: string | null };
-      parsed = {
-        hook: tmp.hook ?? "",
-        post: tmp.post ?? "",
-        cta: shouldOmitCTA(advancedConfig) ? null : tmp.cta ?? null,
-      };
-    } catch {
-      return NextResponse.json({ error: "Erro ao processar resposta. Tenta de novo." }, { status: 500 });
+    let hook = parsed.hook ?? "";
+    let post = parsed.post ?? "";
+    let cta: string | null = shouldOmitCTA(config) ? null : parsed.cta ?? null;
+    let hookAlternatives: HookScore[] | undefined = parsed.hookAlternatives;
+
+    // Se hook engine ativado, garante o hook escolhido vem das alternatives
+    if (config.generateHookVariations && hookAlternatives && hookAlternatives.length > 0) {
+      const chosen = pickHookFromAlternatives(hookAlternatives, parsed.winnerIndex);
+      if (chosen) hook = chosen;
     }
 
-    // hardLimit: 1 retry se fora do range
-    if (advancedConfig.hardLimit && !isPostInRange(parsed.post, advancedConfig)) {
-      const retry = await client.chat.completions.create({
+    // 1. WORD TARGET — expande se ficou curto demais
+    const wt = resolveWordTarget(config);
+    let wordCount = countWords(post);
+    if (wordCount < wt.min && post.length > 0) {
+      const expansionInstruction = `O post tem ${wordCount} palavras, abaixo do mínimo de ${wt.min} (alvo ${wt.target}). Expanda mantendo EXATAMENTE o mesmo estilo, tom e voz. Adicione: exemplos concretos, bastidor operacional, densidade técnica do domínio. NÃO enrole, NÃO repita, NÃO genericalize. Mantenha hook e CTA. Retorne o mesmo JSON com "post" expandido pra atingir ${wt.target} palavras.`;
+      const expansion = await client.chat.completions.create({
         model: "gpt-4o",
-        max_tokens: 2048,
-        temperature: Math.max(0.3, temperature - 0.3),
+        max_tokens: 4096,
+        temperature: Math.max(0.5, temperature - 0.2),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
           { role: "assistant", content: raw },
-          { role: "user", content: buildRetryMessage(advancedConfig, parsed.post.length) },
+          { role: "user", content: expansionInstruction },
         ],
       });
-
-      const retryRaw = retry.choices[0]?.message?.content ?? "";
-      try {
-        const tmp = JSON.parse(retryRaw) as { hook?: string; post?: string; cta?: string | null };
-        parsed = {
-          hook: tmp.hook ?? parsed.hook,
-          post: tmp.post ?? parsed.post,
-          cta: shouldOmitCTA(advancedConfig) ? null : tmp.cta ?? parsed.cta,
-        };
-      } catch {
-        // mantém o original se o retry falhar de parsear
+      const expRaw = expansion.choices[0]?.message?.content ?? "";
+      const expParsed = parseSafe(expRaw);
+      if (expParsed.post && countWords(expParsed.post) > wordCount) {
+        post = expParsed.post;
+        if (expParsed.hook) hook = expParsed.hook;
+        if (!shouldOmitCTA(config) && expParsed.cta) cta = expParsed.cta;
+        wordCount = countWords(post);
       }
     }
 
-    return NextResponse.json(parsed);
+    // 2. ANTI-IA VALIDATOR — reescreve se score > 6 ou se antiAILevel >= 8
+    let antiAIReport = validateAntiAI(post);
+    const shouldRewriteForAI =
+      antiAIReport.rewriteRequired || (config.antiAILevel >= 8 && antiAIReport.aiRiskScore >= 4);
+
+    if (shouldRewriteForAI) {
+      const rewriteInstruction = buildAntiAIRewriteInstruction(antiAIReport);
+      const rewrite = await client.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 4096,
+        temperature: Math.min(1.3, temperature + 0.15),
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+          { role: "assistant", content: JSON.stringify({ hook, post, cta }) },
+          { role: "user", content: rewriteInstruction },
+        ],
+      });
+      const rwRaw = rewrite.choices[0]?.message?.content ?? "";
+      const rwParsed = parseSafe(rwRaw);
+      if (rwParsed.post) {
+        const newReport = validateAntiAI(rwParsed.post);
+        if (newReport.aiRiskScore < antiAIReport.aiRiskScore) {
+          post = rwParsed.post;
+          if (rwParsed.hook) hook = rwParsed.hook;
+          if (!shouldOmitCTA(config) && rwParsed.cta) cta = rwParsed.cta;
+          antiAIReport = newReport;
+          wordCount = countWords(post);
+        }
+      }
+    }
+
+    // 3. HARD LIMIT (chars) — retry se fora do range
+    const charRange = resolveLengthRange(config);
+    if (config.hardLimit && (post.length < charRange.min || post.length > charRange.max)) {
+      const retry = await client.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 4096,
+        temperature: Math.max(0.4, temperature - 0.3),
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+          { role: "assistant", content: JSON.stringify({ hook, post, cta }) },
+          {
+            role: "user",
+            content: `Hard limit ATIVO. Post atual tem ${post.length} chars. Ajuste para EXATAMENTE entre ${charRange.min} e ${charRange.max} caracteres mantendo voz e densidade. Mesmo JSON.`,
+          },
+        ],
+      });
+      const retryRaw = retry.choices[0]?.message?.content ?? "";
+      const retryParsed = parseSafe(retryRaw);
+      if (retryParsed.post) {
+        post = retryParsed.post;
+        if (retryParsed.hook) hook = retryParsed.hook;
+        if (!shouldOmitCTA(config) && retryParsed.cta) cta = retryParsed.cta;
+        antiAIReport = validateAntiAI(post);
+        wordCount = countWords(post);
+      }
+    }
+
+    const result: GenerationResult = {
+      hook,
+      post,
+      cta,
+      hookAlternatives,
+      wordCount,
+      antiAIReport,
+    };
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Generate error:", error);
     const msg = error instanceof Error ? error.message : "Erro desconhecido";
