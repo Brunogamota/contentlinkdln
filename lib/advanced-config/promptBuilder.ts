@@ -1,5 +1,5 @@
 import { AdvancedPostConfig } from "./types";
-import { resolveLengthRange, resolveWordTarget } from "./defaults";
+import { resolveLengthRange, resolveWordTarget, getPlatformCharCap, getPlatformLabel } from "./defaults";
 import { BRUNO_AUTHOR_DNA } from "@/lib/author-dna/bruno";
 
 /* -------------------------------------------------------------------------- */
@@ -191,22 +191,35 @@ ${BRUNO_AUTHOR_DNA.themes.join(" · ")}`;
 export function buildGenerationDirectives(config: AdvancedPostConfig): string {
   const wt = resolveWordTarget(config);
   const charRange = resolveLengthRange(config);
+  const platformCap = getPlatformCharCap(config.outputFormat);
+  const platformLabel = getPlatformLabel(config.outputFormat);
+
+  const platformHardLimit = `
+🚨 LIMITE ABSOLUTO DE PLATAFORMA — ${platformLabel.toUpperCase()}: MÁXIMO ${platformCap} CARACTERES TOTAIS
+
+A SOMA de (hook + post + cta + 2 quebras de linha) NÃO PODE passar de ${platformCap} caracteres.
+Esta é uma trava INVIOLÁVEL — a plataforma corta acima disso. Antes de retornar:
+1. CONTE os chars do hook
+2. CONTE os chars do post
+3. CONTE os chars do CTA (se houver)
+4. Some + 4 (quebras de linha)
+5. Se total > ${platformCap}: REDUZA o post até caber. Mantenha hook e CTA.`;
 
   const lengthDirective = config.hardLimit
     ? `📏 TAMANHO DO POST — LIMITE RÍGIDO ATIVO
 
 ALVO: ${wt.target} palavras (faixa aceitável: ${wt.min}–${wt.max} palavras)
-EQUIVALÊNCIA EM CHARS: ${charRange.min}–${charRange.max} caracteres
+EQUIVALÊNCIA EM CHARS DO POST: ${charRange.min}–${charRange.max} caracteres
 
 ⚠️ REGRA OBRIGATÓRIA: você DEVE entregar entre ${wt.min} e ${wt.max} palavras. Conte enquanto escreve.
 - Se passar de ${wt.max} palavras: pare e finalize naturalmente
 - Se abaixo de ${wt.min} palavras: continue até atingir
 - NÃO retorne texto fora dessa faixa em hipótese alguma
-
-Antes de finalizar: CONTE as palavras do seu post (split por espaço) e confirme que está dentro da faixa.`
+${platformHardLimit}`
     : `📏 TAMANHO ALVO (aproximado, pode variar 15%):
 - Palavras: ${wt.target} (faixa ${wt.min}–${wt.max})
-- Caracteres: ${charRange.min}–${charRange.max}`;
+- Caracteres do post: ${charRange.min}–${charRange.max}
+${platformHardLimit}`;
 
   const directives: string[] = [
     lengthDirective,

@@ -20,7 +20,7 @@ import {
   OutputFormat,
   PresetName,
 } from "@/lib/advanced-config/types";
-import { PRESETS, DEFAULT_CONFIG, defaultWordTargetForMode } from "@/lib/advanced-config/defaults";
+import { PRESETS, DEFAULT_CONFIG, defaultWordTargetForMode, isOverPlatformCap, getPlatformCharCap, getPlatformLabel } from "@/lib/advanced-config/defaults";
 
 interface Props {
   config: AdvancedPostConfig;
@@ -217,6 +217,16 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
             value={config.hardLimit}
             onChange={(v) => update("hardLimit", v)}
           />
+          {isOverPlatformCap(config) && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-xs text-amber-300 space-y-0.5">
+              <p className="font-medium">
+                ⚠️ {getPlatformLabel(config.outputFormat)} limita posts a {getPlatformCharCap(config.outputFormat).toLocaleString("pt-BR")} caracteres
+              </p>
+              <p className="text-amber-200/70">
+                Sua config pede mais do que isso. O servidor vai aplicar trava automática e cortar o post pra caber no limite da plataforma.
+              </p>
+            </div>
+          )}
         </Section>
 
         <Divider />

@@ -13,7 +13,7 @@ import { ApiKeyModal, ApiKeyButton } from "@/components/ApiKeyModal";
 import { AdvancedPostConfigPanel } from "@/components/AdvancedPostConfig";
 import { AdvancedPostConfig, HookScore, AntiAIReport } from "@/lib/advanced-config/types";
 import { getAdvancedConfig, saveAdvancedConfig } from "@/lib/advanced-config/store";
-import { DEFAULT_CONFIG, resolveLengthRange, resolveWordTarget } from "@/lib/advanced-config/defaults";
+import { DEFAULT_CONFIG, resolveLengthRange, resolveWordTarget, getPlatformCharCap, getPlatformLabel, combinedLength } from "@/lib/advanced-config/defaults";
 
 type Mode = "polemico" | "viral" | "autoridade";
 
@@ -176,6 +176,11 @@ export default function Home() {
   const inCharRange = result ? postLen >= lengthRange.min && postLen <= lengthRange.max : true;
   const inWordRange = result ? wordCount >= wordTargetInfo.min && wordCount <= wordTargetInfo.max : true;
   const aiRisk = result?.antiAIReport?.aiRiskScore ?? 0;
+
+  const platformCap = getPlatformCharCap(advancedConfig.outputFormat);
+  const platformLabel = getPlatformLabel(advancedConfig.outputFormat);
+  const combinedTotal = result ? combinedLength(result.hook, result.post, result.cta) : 0;
+  const withinPlatform = combinedTotal <= platformCap;
 
   const swapHook = (newHook: string) => {
     if (!result) return;
@@ -374,8 +379,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Métricas — anti-IA + word count + char count */}
-            <div className="grid grid-cols-3 gap-2">
+            {/* Métricas — palavras + chars + total plataforma + risco IA */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <MetricCard
                 label="palavras"
                 value={wordCount.toLocaleString("pt-BR")}
@@ -383,10 +388,16 @@ export default function Home() {
                 tone={inWordRange ? "good" : "warn"}
               />
               <MetricCard
-                label="caracteres"
+                label="chars (post)"
                 value={postLen.toLocaleString("pt-BR")}
                 hint={`${lengthRange.min}–${lengthRange.max}`}
                 tone={inCharRange ? "good" : advancedConfig.hardLimit ? "bad" : "warn"}
+              />
+              <MetricCard
+                label={`total ${platformLabel.toLowerCase()}`}
+                value={`${combinedTotal.toLocaleString("pt-BR")}/${platformCap.toLocaleString("pt-BR")}`}
+                hint={withinPlatform ? "ok pra postar" : "passou do limite"}
+                tone={withinPlatform ? "good" : "bad"}
               />
               <MetricCard
                 label="risco IA"

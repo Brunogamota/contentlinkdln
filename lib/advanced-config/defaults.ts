@@ -117,25 +117,87 @@ export const PRESETS: Record<PresetName, AdvancedPostConfig> = {
   },
 };
 
-export function resolveLengthRange(config: AdvancedPostConfig): { min: number; max: number } {
-  // Custom: usa chars explícitos definidos pelo usuário
+/* -------------------------------------------------------------------------- */
+/*                       PLATFORM CHAR CAPS (HARD LIMITS)                     */
+/* -------------------------------------------------------------------------- */
+
+/** LinkedIn limita posts a 3000 caracteres no total */
+export const LINKEDIN_MAX_CHARS = 3000;
+/** Twitter/X thread — limite agregado conservador (≈ 30 tweets × 280) */
+export const TWITTER_THREAD_MAX_CHARS = 8400;
+/** Newsletter — sem limite prático */
+export const NEWSLETTER_MAX_CHARS = 50000;
+
+export function getPlatformCharCap(format: AdvancedPostConfig["outputFormat"]): number {
+  switch (format) {
+    case "linkedin":
+      return LINKEDIN_MAX_CHARS;
+    case "twitter_thread":
+      return TWITTER_THREAD_MAX_CHARS;
+    case "newsletter":
+      return NEWSLETTER_MAX_CHARS;
+  }
+}
+
+export function getPlatformLabel(format: AdvancedPostConfig["outputFormat"]): string {
+  switch (format) {
+    case "linkedin":
+      return "LinkedIn";
+    case "twitter_thread":
+      return "Thread X";
+    case "newsletter":
+      return "Newsletter";
+  }
+}
+
+/** Computa o tamanho COMBINADO (hook + post + cta + quebras) que vai pra plataforma */
+export function combinedLength(hook: string, post: string, cta: string | null): number {
+  const sep = "\n\n";
+  return (hook?.length ?? 0) + sep.length + (post?.length ?? 0) + (cta ? sep.length + cta.length : 0);
+}
+
+/** Verifica se a config atual ultrapassaria o limite de plataforma */
+export function isOverPlatformCap(config: AdvancedPostConfig): boolean {
+  const cap = getPlatformCharCap(config.outputFormat);
+  // Cap só "morde" quando há limite prático (newsletter é efetivamente infinito)
+  if (cap >= NEWSLETTER_MAX_CHARS) return false;
+
+  let maxChars: number;
   if (config.contentLengthMode === "custom") {
-    return {
+    maxChars = Math.max(config.minChars, config.maxChars);
+  } else {
+    // wordTarget bruto × 7 chars/palavra (limite superior conservador)
+    const wtRaw = config.wordTarget || 900;
+    maxChars = Math.floor(wtRaw * 1.2 * 7);
+  }
+  return maxChars > cap;
+}
+
+export function resolveLengthRange(config: AdvancedPostConfig): { min: number; max: number } {
+  const cap = getPlatformCharCap(config.outputFormat);
+
+  let range: { min: number; max: number };
+  if (config.contentLengthMode === "custom") {
+    range = {
       min: Math.max(50, Math.min(config.minChars, config.maxChars)),
       max: Math.max(100, Math.max(config.minChars, config.maxChars)),
     };
+  } else {
+    const wt = resolveWordTargetRaw(config);
+    range = {
+      min: Math.floor(wt.min * 5),
+      max: Math.floor(wt.max * 7),
+    };
   }
-  // Caso contrário: deriva chars do wordTarget (consistência word/char)
-  // Português ~5-7 chars por palavra (média) → conservador 5.0 a 7.0
-  const wt = resolveWordTarget(config);
+  // Aplica platform cap (hard ceiling)
   return {
-    min: Math.floor(wt.min * 5),
-    max: Math.floor(wt.max * 7),
+    min: Math.min(range.min, cap),
+    max: Math.min(range.max, cap),
   };
 }
 
-export function resolveWordTarget(config: AdvancedPostConfig): { target: number; min: number; max: number } {
-  // Se wordTarget é explícito (não zero/inválido), usa
+/** Versão SEM cap — usada internamente pra calcular o range bruto */
+function resolveWordTargetRaw(config: AdvancedPostConfig): { target: number; min: number; max: number } {
   let target = config.wordTarget;
   if (!target || target < 50) {
     switch (config.contentLengthMode) {
@@ -159,6 +221,20 @@ export function resolveWordTarget(config: AdvancedPostConfig): { target: number;
     target,
     min: Math.floor(target * 0.85),
     max: Math.floor(target * 1.2),
+  };
+}
+
+export function resolveWordTarget(config: AdvancedPostConfig): { target: number; min: number; max: number } {
+  const raw = resolveWordTargetRaw(config);
+  const cap = getPlatformCharCap(config.outputFormat);
+  // Converter cap de chars pra palavras (conservador: 6 chars/palavra)
+  // E reservar ~250 chars pra hook + cta + quebras → cap efetivo do POST
+  const postCap = Math.max(100, cap - 250);
+  const wordCap = Math.floor(postCap / 6);
+  return {
+    target: Math.min(raw.target, wordCap),
+    min: Math.min(raw.min, wordCap),
+    max: Math.min(raw.max, wordCap),
   };
 }
 

@@ -17,9 +17,30 @@ import {
   temperatureFor,
   countWords,
   isGibberishOutput,
+  getPlatformCharCap,
+  getPlatformLabel,
+  combinedLength,
   DEFAULT_CONFIG,
 } from "@/lib/advanced-config/defaults";
 import { validateAntiAI, buildAntiAIRewriteInstruction } from "@/lib/advanced-config/antiAI";
+
+/** Corte programático no último limite de parágrafo/frase ≤ maxChars */
+function smartTruncate(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  // Tentar cortar em quebra de parágrafo (>= 70% do max)
+  const paraBreak = slice.lastIndexOf("\n\n");
+  if (paraBreak > maxChars * 0.7) return slice.slice(0, paraBreak).trimEnd();
+  // Tentar cortar em fim de frase
+  const sentenceEnd = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf(".\n"),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? ")
+  );
+  if (sentenceEnd > maxChars * 0.7) return slice.slice(0, sentenceEnd + 1);
+  return slice.trimEnd();
+}
 
 function getClient(apiKey: string) {
   return new OpenAI({ apiKey });
@@ -274,6 +295,61 @@ export async function POST(request: NextRequest) {
           wordCount = countWords(post);
         }
       }
+    }
+
+    // ---------- PLATFORM CHAR CAP — TRAVA FINAL INVIOLÁVEL ----------
+    const platformCap = getPlatformCharCap(config.outputFormat);
+    const platformLabel = getPlatformLabel(config.outputFormat);
+    let combined = combinedLength(hook, post, cta);
+    let platformCutRetries = 0;
+
+    while (combined > platformCap && platformCutRetries < 2) {
+      platformCutRetries++;
+      const overBy = combined - platformCap;
+      const cutRetry = await client.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 4096,
+        temperature: safeTemp(baseTemp - 0.15),
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+          { role: "assistant", content: JSON.stringify({ hook, post, cta }) },
+          {
+            role: "user",
+            content: `🚨 LIMITE DE PLATAFORMA ULTRAPASSADO
+Soma atual (hook + post + cta + quebras) = ${combined} chars
+Plataforma ${platformLabel} = MÁXIMO ${platformCap} chars
+Excedeu em ${overBy} chars
+
+OBRIGATÓRIO: cortar o POST até a soma total ficar ≤ ${platformCap} chars. Mantenha hook e cta intactos. Preserve o impacto — cortar gordura, não músculo. Retorne o JSON ajustado.`,
+          },
+        ],
+      });
+      const cutRaw = cutRetry.choices[0]?.message?.content ?? "";
+      const cutParsed = parseSafe(cutRaw);
+      if (cutParsed.post && !isGibberishOutput(cutParsed.post)) {
+        const newPost = cutParsed.post;
+        const newHook = cutParsed.hook || hook;
+        const newCta = shouldOmitCTA(config) ? null : cutParsed.cta ?? cta;
+        const newCombined = combinedLength(newHook, newPost, newCta);
+        if (newCombined < combined) {
+          hook = newHook;
+          post = newPost;
+          cta = newCta;
+          combined = newCombined;
+          wordCount = countWords(post);
+        }
+      }
+    }
+
+    // Fallback inviolável: se ainda passou, corte programático no post
+    if (combined > platformCap) {
+      const reserve = (hook?.length ?? 0) + (cta ? cta.length + 4 : 0) + 4;
+      const allowedPostChars = Math.max(200, platformCap - reserve);
+      post = smartTruncate(post, allowedPostChars);
+      combined = combinedLength(hook, post, cta);
+      wordCount = countWords(post);
     }
 
     const result: GenerationResult = {

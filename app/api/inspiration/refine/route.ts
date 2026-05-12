@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { GeneratedPost, ReferenceInput, RefineAction } from "@/lib/inspiration/types";
 import { buildRefineSystemPrompt, buildRefineUserMessage } from "@/lib/inspiration/prompts/refine";
+import { LINKEDIN_MAX_CHARS, combinedLength } from "@/lib/advanced-config/defaults";
 
 function getClient(apiKey: string) {
   return new OpenAI({ apiKey });
@@ -9,6 +10,21 @@ function getClient(apiKey: string) {
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function smartTruncate(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  const paraBreak = slice.lastIndexOf("\n\n");
+  if (paraBreak > maxChars * 0.7) return slice.slice(0, paraBreak).trimEnd();
+  const sentenceEnd = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf(".\n"),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? ")
+  );
+  if (sentenceEnd > maxChars * 0.7) return slice.slice(0, sentenceEnd + 1);
+  return slice.trimEnd();
 }
 
 export async function POST(request: NextRequest) {
@@ -47,6 +63,16 @@ export async function POST(request: NextRequest) {
     }
 
     refined.wordCount = countWords(refined.post);
+
+    // LinkedIn char cap — fallback programático
+    const combined = combinedLength(refined.hook, refined.post, refined.cta);
+    if (combined > LINKEDIN_MAX_CHARS) {
+      const reserve = (refined.hook?.length ?? 0) + (refined.cta ? refined.cta.length + 4 : 0) + 4;
+      const allowedPostChars = Math.max(200, LINKEDIN_MAX_CHARS - reserve);
+      refined.post = smartTruncate(refined.post, allowedPostChars);
+      refined.wordCount = countWords(refined.post);
+    }
+
     return NextResponse.json(refined);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Erro desconhecido";

@@ -14,6 +14,22 @@ import {
 } from "@/lib/inspiration/prompts/generatePost";
 import { AggregateSynthesis } from "@/lib/inspiration/prompts/synthesize";
 import { validateAntiAI } from "@/lib/advanced-config/antiAI";
+import { LINKEDIN_MAX_CHARS, combinedLength } from "@/lib/advanced-config/defaults";
+
+function smartTruncate(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  const paraBreak = slice.lastIndexOf("\n\n");
+  if (paraBreak > maxChars * 0.7) return slice.slice(0, paraBreak).trimEnd();
+  const sentenceEnd = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf(".\n"),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? ")
+  );
+  if (sentenceEnd > maxChars * 0.7) return slice.slice(0, sentenceEnd + 1);
+  return slice.trimEnd();
+}
 
 function getClient(apiKey: string) {
   return new OpenAI({ apiKey });
@@ -273,6 +289,50 @@ export async function POST(request: NextRequest) {
       } catch {
         /* mantém */
       }
+    }
+
+    // ---------- LINKEDIN CHAR CAP — TRAVA FINAL INVIOLÁVEL (3000 chars) ----------
+    let combined = combinedLength(post.hook, post.post, post.cta);
+    if (combined > LINKEDIN_MAX_CHARS) {
+      const cutRetry = await client.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 4096,
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+          { role: "assistant", content: raw },
+          {
+            role: "user",
+            content: `🚨 LIMITE DO LINKEDIN ULTRAPASSADO
+Soma atual (hook + post + cta + quebras) = ${combined} chars
+LinkedIn = MÁXIMO ${LINKEDIN_MAX_CHARS} chars
+
+OBRIGATÓRIO: cortar o POST até soma total ≤ ${LINKEDIN_MAX_CHARS} chars. Mantenha hook e cta. Retorne o JSON ajustado.`,
+          },
+        ],
+      });
+      const cutRaw = cutRetry.choices[0]?.message?.content ?? "";
+      try {
+        const cutPost = JSON.parse(cutRaw) as GeneratedPost;
+        const newCombined = combinedLength(cutPost.hook || post.hook, cutPost.post || post.post, cutPost.cta ?? post.cta);
+        if (newCombined < combined && cutPost.post) {
+          post.hook = cutPost.hook || post.hook;
+          post.post = cutPost.post;
+          if (cutPost.cta !== undefined) post.cta = cutPost.cta;
+          post.wordCount = countWords(post.post);
+          combined = newCombined;
+        }
+      } catch {
+        /* mantém */
+      }
+    }
+    if (combined > LINKEDIN_MAX_CHARS) {
+      const reserve = (post.hook?.length ?? 0) + (post.cta ? post.cta.length + 4 : 0) + 4;
+      const allowedPostChars = Math.max(200, LINKEDIN_MAX_CHARS - reserve);
+      post.post = smartTruncate(post.post, allowedPostChars);
+      post.wordCount = countWords(post.post);
     }
 
     return NextResponse.json(post);
