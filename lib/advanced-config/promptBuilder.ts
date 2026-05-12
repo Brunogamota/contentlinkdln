@@ -192,8 +192,24 @@ export function buildGenerationDirectives(config: AdvancedPostConfig): string {
   const wt = resolveWordTarget(config);
   const charRange = resolveLengthRange(config);
 
+  const lengthDirective = config.hardLimit
+    ? `📏 TAMANHO DO POST — LIMITE RÍGIDO ATIVO
+
+ALVO: ${wt.target} palavras (faixa aceitável: ${wt.min}–${wt.max} palavras)
+EQUIVALÊNCIA EM CHARS: ${charRange.min}–${charRange.max} caracteres
+
+⚠️ REGRA OBRIGATÓRIA: você DEVE entregar entre ${wt.min} e ${wt.max} palavras. Conte enquanto escreve.
+- Se passar de ${wt.max} palavras: pare e finalize naturalmente
+- Se abaixo de ${wt.min} palavras: continue até atingir
+- NÃO retorne texto fora dessa faixa em hipótese alguma
+
+Antes de finalizar: CONTE as palavras do seu post (split por espaço) e confirme que está dentro da faixa.`
+    : `📏 TAMANHO ALVO (aproximado, pode variar 15%):
+- Palavras: ${wt.target} (faixa ${wt.min}–${wt.max})
+- Caracteres: ${charRange.min}–${charRange.max}`;
+
   const directives: string[] = [
-    `📏 TAMANHO ALVO: ${wt.target} palavras (aceitável ${wt.min}–${wt.max}). Faixa de chars: ${charRange.min}–${charRange.max}.${config.hardLimit ? " LIMITE RÍGIDO — não ultrapassar." : ""}`,
+    lengthDirective,
     `🔥 Intensidade (${config.intensitySlider}/10): ${intensityDirective(config.intensitySlider)}`,
     `⚔️ Polêmica (${config.controversySlider}/10): ${controversyDirective(config.controversySlider)}`,
     `🧠 Autoridade (${config.authoritySlider}/10): ${authorityDirective(config.authoritySlider)}`,

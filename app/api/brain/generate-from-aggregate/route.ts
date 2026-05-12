@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       const rewrite = await client.chat.completions.create({
         model: "gpt-4o",
         max_tokens: 4096,
-        temperature: 1.05,
+        temperature: 1.0,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },

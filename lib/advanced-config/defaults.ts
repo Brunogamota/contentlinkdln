@@ -118,25 +118,24 @@ export const PRESETS: Record<PresetName, AdvancedPostConfig> = {
 };
 
 export function resolveLengthRange(config: AdvancedPostConfig): { min: number; max: number } {
-  switch (config.contentLengthMode) {
-    case "short":
-      return { min: 200, max: 600 };
-    case "medium":
-      return { min: 600, max: 1200 };
-    case "long":
-      return { min: 1200, max: 2500 };
-    case "deep_dive":
-      return { min: 2500, max: 5500 };
-    case "custom":
-      return {
-        min: Math.max(50, Math.min(config.minChars, config.maxChars)),
-        max: Math.max(100, Math.max(config.minChars, config.maxChars)),
-      };
+  // Custom: usa chars explícitos definidos pelo usuário
+  if (config.contentLengthMode === "custom") {
+    return {
+      min: Math.max(50, Math.min(config.minChars, config.maxChars)),
+      max: Math.max(100, Math.max(config.minChars, config.maxChars)),
+    };
   }
+  // Caso contrário: deriva chars do wordTarget (consistência word/char)
+  // Português ~5-7 chars por palavra (média) → conservador 5.0 a 7.0
+  const wt = resolveWordTarget(config);
+  return {
+    min: Math.floor(wt.min * 5),
+    max: Math.floor(wt.max * 7),
+  };
 }
 
 export function resolveWordTarget(config: AdvancedPostConfig): { target: number; min: number; max: number } {
-  // Se já tem wordTarget customizado e não é default, usa
+  // Se wordTarget é explícito (não zero/inválido), usa
   let target = config.wordTarget;
   if (!target || target < 50) {
     switch (config.contentLengthMode) {
@@ -178,19 +177,53 @@ export function lengthModeLabel(mode: ContentLengthMode): string {
   }
 }
 
+/** Word target padrão por modo (usado no UI ao trocar mode) */
+export function defaultWordTargetForMode(mode: ContentLengthMode): number {
+  switch (mode) {
+    case "short":
+      return 450;
+    case "medium":
+      return 900;
+    case "long":
+      return 1600;
+    case "deep_dive":
+      return 2700;
+    default:
+      return 900;
+  }
+}
+
+/**
+ * Temperatura mapeada da variação criativa.
+ * IMPORTANTE: cap em 0.95 — temperaturas > 1.0 fazem o GPT-4o gerar
+ * texto incoerente / mistura de idiomas (word salad). Nunca passar de 1.0.
+ */
 export function temperatureFor(variation: AdvancedPostConfig["creativeVariation"]): number {
   switch (variation) {
     case "low":
-      return 0.4;
+      return 0.3;
     case "medium":
-      return 0.7;
+      return 0.6;
     case "high":
-      return 0.95;
+      return 0.8;
     case "controlled_chaos":
-      return 1.15;
+      return 0.95;
   }
 }
 
 export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Detecta texto incoerente / word salad / mistura excessiva de idiomas.
+ * Conta proporção de chars fora do alfabeto latino esperado em pt-BR.
+ * Se > 12%, considera gibberish (modelo bugou).
+ */
+export function isGibberishOutput(text: string): boolean {
+  if (text.length < 100) return false;
+  // Aceitar: letras latinas, acentos pt-BR, pontuação, espaço, números
+  const nonLatinMatches = text.match(/[^\p{Script=Latin}\p{P}\p{Z}\p{N}\s]/gu);
+  const ratio = (nonLatinMatches?.length ?? 0) / text.length;
+  return ratio > 0.12;
 }

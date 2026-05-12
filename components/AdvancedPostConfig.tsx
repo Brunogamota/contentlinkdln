@@ -20,7 +20,7 @@ import {
   OutputFormat,
   PresetName,
 } from "@/lib/advanced-config/types";
-import { PRESETS, DEFAULT_CONFIG } from "@/lib/advanced-config/defaults";
+import { PRESETS, DEFAULT_CONFIG, defaultWordTargetForMode } from "@/lib/advanced-config/defaults";
 
 interface Props {
   config: AdvancedPostConfig;
@@ -163,7 +163,15 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
         <Section title="Tamanho do post" emoji="📏">
           <Seg<ContentLengthMode>
             value={config.contentLengthMode}
-            onChange={(v) => update("contentLengthMode", v)}
+            onChange={(v) => {
+              // Auto-sincroniza word target com o mode (a menos que custom)
+              if (v === "custom") {
+                onChange({ ...config, contentLengthMode: v });
+              } else {
+                const target = defaultWordTargetForMode(v);
+                onChange({ ...config, contentLengthMode: v, wordTarget: target });
+              }
+            }}
             options={[
               { value: "short", label: "curto", hint: "300–600 pal" },
               { value: "medium", label: "médio", hint: "700–1200 pal" },
@@ -205,7 +213,7 @@ export function AdvancedPostConfigPanel({ config, onChange }: Props) {
             </div>
           )}
           <Toggle
-            label="respeitar limite rigidamente (chars)"
+            label="respeitar limite rigidamente (palavras)"
             value={config.hardLimit}
             onChange={(v) => update("hardLimit", v)}
           />
